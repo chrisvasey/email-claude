@@ -245,6 +245,10 @@ export async function handleEmailWebhook(
     });
   }
 
+  // Log incoming email
+  console.log(`[Webhook] Received email from ${payload.data.from}`);
+  console.log(`[Webhook] Subject: ${payload.data.subject}`);
+
   // Check sender against allowlist
   if (!isAllowedSender(payload.data.from, cfg.security.allowedSenders)) {
     return new Response(JSON.stringify({ error: "Sender not allowed" }), {
@@ -263,6 +267,7 @@ export async function handleEmailWebhook(
   }
 
   const project = extractProject(toAddress);
+  console.log(`[Webhook] Project: ${project}`);
 
   // Ensure database is initialized
   if (!db) {
@@ -283,6 +288,8 @@ export async function handleEmailWebhook(
 
   // Check if this is a resume (existing session with claude_session_id)
   const resumeSession = session.claudeSessionId !== null;
+  const isExisting = session.prNumber !== null || resumeSession;
+  console.log(`[Webhook] Session: ${session.id.slice(0, 8)} (${isExisting ? "existing" : "new"})`);
 
   // Generate job ID
   const jobId = generateJobId();
@@ -309,6 +316,7 @@ export async function handleEmailWebhook(
 
   const queueKey = `${cfg.redis.prefix}jobs:pending`;
   await redisClient.lPush(queueKey, JSON.stringify(job));
+  console.log(`[Webhook] Job queued: ${jobId.slice(0, 8)}`);
 
   // Return success with job ID
   return new Response(
