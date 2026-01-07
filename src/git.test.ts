@@ -222,6 +222,23 @@ describe("git module", () => {
     });
   });
 
+  describe("commentOnPR", () => {
+    test("runs gh pr comment command", async () => {
+      spawnMock.mockImplementation((cmd: string[], options: { cwd: string }) => {
+        spawnCalls.push({ cmd, cwd: options.cwd });
+        return createMockProc("");
+      });
+
+      const { commentOnPR } = await import("./git.ts");
+      await commentOnPR("/test/project", 42, "This is a test comment");
+
+      expect(spawnCalls[0].cmd).toEqual([
+        "gh", "pr", "comment", "42",
+        "--body", "This is a test comment",
+      ]);
+    });
+  });
+
   describe("hasChanges", () => {
     test("returns true when there are changes", async () => {
       spawnMock.mockImplementation((cmd: string[], options: { cwd: string }) => {

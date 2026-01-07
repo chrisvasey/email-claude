@@ -16,10 +16,9 @@ import type { ClaudeCodeMessage } from "../services/claude-code";
 
 // Mock modules
 let mockEnsureBranch: ReturnType<typeof mock>;
-let mockCommitAndPush: ReturnType<typeof mock>;
 let mockCreatePR: ReturnType<typeof mock>;
 let mockGetPRUrl: ReturnType<typeof mock>;
-let mockHasChanges: ReturnType<typeof mock>;
+let mockCommentOnPR: ReturnType<typeof mock>;
 let mockSendReply: ReturnType<typeof mock>;
 let mockFormatSuccessReply: ReturnType<typeof mock>;
 let mockFormatErrorReply: ReturnType<typeof mock>;
@@ -27,6 +26,7 @@ let mockUpdateSession: ReturnType<typeof mock>;
 let mockClaudeStart: ReturnType<typeof mock>;
 let mockClaudeOnMessage: ReturnType<typeof mock>;
 let mockClaudeOnComplete: ReturnType<typeof mock>;
+let mockBuildFullPrompt: ReturnType<typeof mock>;
 
 // Store callbacks for simulating Claude behavior
 let messageCallback: ((msg: ClaudeCodeMessage) => void) | null = null;
@@ -56,10 +56,13 @@ mock.module("../services/claude-code", () => ({
 
 mock.module("../git", () => ({
   ensureBranch: (...args: unknown[]) => mockEnsureBranch(...args),
-  commitAndPush: (...args: unknown[]) => mockCommitAndPush(...args),
   createPR: (...args: unknown[]) => mockCreatePR(...args),
   getPRUrl: (...args: unknown[]) => mockGetPRUrl(...args),
-  hasChanges: (...args: unknown[]) => mockHasChanges(...args),
+  commentOnPR: (...args: unknown[]) => mockCommentOnPR(...args),
+}));
+
+mock.module("../prompts", () => ({
+  buildFullPrompt: (...args: unknown[]) => mockBuildFullPrompt(...args),
 }));
 
 mock.module("../mailer", () => ({
@@ -81,12 +84,11 @@ describe("email-job handler", () => {
   beforeEach(() => {
     // Reset all mocks
     mockEnsureBranch = mock(() => Promise.resolve());
-    mockCommitAndPush = mock(() => Promise.resolve());
     mockCreatePR = mock(() => Promise.resolve(42));
     mockGetPRUrl = mock(() =>
       Promise.resolve("https://github.com/test/repo/pull/42")
     );
-    mockHasChanges = mock(() => Promise.resolve(true));
+    mockCommentOnPR = mock(() => Promise.resolve());
     mockSendReply = mock(() => Promise.resolve());
     mockFormatSuccessReply = mock(() => ({
       to: "user@example.com",
@@ -101,6 +103,7 @@ describe("email-job handler", () => {
     mockUpdateSession = mock(() => {});
     mockClaudeOnMessage = mock(() => () => {});
     mockClaudeOnComplete = mock(() => () => {});
+    mockBuildFullPrompt = mock((prompt: string) => `SYSTEM INSTRUCTIONS\n\n---\n\n${prompt}`);
 
     // Reset callbacks
     messageCallback = null;
@@ -161,7 +164,7 @@ describe("email-job handler", () => {
   });
 
   describe("handleEmailJob", () => {
-    it("creates branch, runs claude, commits, creates PR, and sends reply", async () => {
+    it("creates branch, runs claude, creates PR with original email, and sends reply", async () => {
       await handleEmailJob(job, session, ctx);
 
       // Verify branch was created
@@ -170,17 +173,19 @@ describe("email-job handler", () => {
         "email-claude-12345678"
       );
 
-      // Verify commit and push
-      expect(mockCommitAndPush).toHaveBeenCalledWith(
-        "/projects/my-project",
-        "Email task: Add feature request"
-      );
+      // Verify prompt was built with system instructions
+      expect(mockBuildFullPrompt).toHaveBeenCalledWith("Add a new feature");
 
-      // Verify PR was created
+      // Verify PR was created with original email in body
       expect(mockCreatePR).toHaveBeenCalledWith(
         "/projects/my-project",
         "[Email] Add feature request",
-        expect.stringContaining("session-456")
+        expect.stringContaining("## Original Request")
+      );
+      expect(mockCreatePR).toHaveBeenCalledWith(
+        "/projects/my-project",
+        "[Email] Add feature request",
+        expect.stringContaining("Add a new feature")
       );
 
       // Verify session was updated with PR number
@@ -196,35 +201,26 @@ describe("email-job handler", () => {
       );
     });
 
-    it("skips commit when no changes exist", async () => {
-      mockHasChanges = mock(() => Promise.resolve(false));
-
-      await handleEmailJob(job, session, ctx);
-
-      // Verify branch was created
-      expect(mockEnsureBranch).toHaveBeenCalled();
-
-      // Verify commit was NOT called
-      expect(mockCommitAndPush).not.toHaveBeenCalled();
-
-      // Verify PR was NOT created
-      expect(mockCreatePR).not.toHaveBeenCalled();
-
-      // Verify success reply was still sent
-      expect(mockSendReply).toHaveBeenCalled();
-    });
-
-    it("reuses existing PR and does not create new one", async () => {
-      // Session already has a PR
+    it("adds comment to existing PR on subsequent emails", async () => {
+      // Session already has a PR (subsequent email)
       session.prNumber = 99;
 
       await handleEmailJob(job, session, ctx);
 
-      // Verify commit was called (changes exist)
-      expect(mockCommitAndPush).toHaveBeenCalled();
-
       // Verify new PR was NOT created
       expect(mockCreatePR).not.toHaveBeenCalled();
+
+      // Verify comment was added to existing PR
+      expect(mockCommentOnPR).toHaveBeenCalledWith(
+        "/projects/my-project",
+        99,
+        expect.stringContaining("## Follow-up Request")
+      );
+      expect(mockCommentOnPR).toHaveBeenCalledWith(
+        "/projects/my-project",
+        99,
+        expect.stringContaining("Add a new feature")
+      );
 
       // Verify existing PR URL was fetched
       expect(mockGetPRUrl).toHaveBeenCalledWith("/projects/my-project", 99);
@@ -272,23 +268,6 @@ describe("email-job handler", () => {
       expect(mockSendReply).toHaveBeenCalled();
     });
 
-    it("sends error reply on commit failure", async () => {
-      mockCommitAndPush = mock(() =>
-        Promise.reject(new Error("Commit failed"))
-      );
-
-      await expect(handleEmailJob(job, session, ctx)).rejects.toThrow(
-        "Commit failed"
-      );
-
-      // Verify error reply was sent
-      expect(mockFormatErrorReply).toHaveBeenCalledWith(
-        expect.objectContaining({ message: "Commit failed" }),
-        job
-      );
-      expect(mockSendReply).toHaveBeenCalled();
-    });
-
     it("sends error reply on PR creation failure", async () => {
       mockCreatePR = mock(() =>
         Promise.reject(new Error("PR creation failed"))
@@ -296,6 +275,21 @@ describe("email-job handler", () => {
 
       await expect(handleEmailJob(job, session, ctx)).rejects.toThrow(
         "PR creation failed"
+      );
+
+      // Verify error reply was sent
+      expect(mockFormatErrorReply).toHaveBeenCalled();
+      expect(mockSendReply).toHaveBeenCalled();
+    });
+
+    it("sends error reply on PR comment failure", async () => {
+      session.prNumber = 99;
+      mockCommentOnPR = mock(() =>
+        Promise.reject(new Error("Comment failed"))
+      );
+
+      await expect(handleEmailJob(job, session, ctx)).rejects.toThrow(
+        "Comment failed"
       );
 
       // Verify error reply was sent

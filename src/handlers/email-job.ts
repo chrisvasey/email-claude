@@ -3,10 +3,9 @@
  *
  * Orchestrates the full email job flow:
  * 1. Setup git branch
- * 2. Run Claude Code with the prompt
- * 3. Commit and push changes if any
- * 4. Create PR if needed (first time only)
- * 5. Send success/error email reply
+ * 2. Run Claude Code with the prompt (Claude handles atomic commits)
+ * 3. Create PR if needed (first time only), or add comment to existing PR
+ * 4. Send success/error email reply
  */
 
 import { Database } from "bun:sqlite";
@@ -16,10 +15,9 @@ import {
 } from "../services/claude-code";
 import {
   ensureBranch,
-  commitAndPush,
   createPR,
   getPRUrl,
-  hasChanges,
+  commentOnPR,
 } from "../git";
 import {
   sendReply,
@@ -29,6 +27,7 @@ import {
   type ClaudeResult,
 } from "../mailer";
 import { updateSession, type Session } from "../session";
+import { buildFullPrompt } from "../prompts";
 
 export interface JobContext {
   db: Database;
@@ -50,36 +49,56 @@ export async function handleEmailJob(
     // 1. Setup git branch
     await ensureBranch(projectPath, session.branchName);
 
-    // 2. Run Claude Code with job.prompt
-    const result = await runClaude(projectPath, job.prompt, session);
+    // 2. Run Claude Code with prompt (includes system instructions for atomic commits)
+    const fullPrompt = buildFullPrompt(job.prompt);
+    const result = await runClaude(projectPath, fullPrompt, session);
 
-    // 3. If changes, commit & push
-    const changesExist = await hasChanges(projectPath);
-    if (changesExist) {
-      await commitAndPush(projectPath, `Email task: ${job.originalSubject}`);
-    }
+    // 3. Handle PR creation or commenting
+    if (session.prNumber === null) {
+      // First email: Create PR with original email in body
+      const prBody = [
+        "## Original Request",
+        "",
+        "```",
+        job.prompt,
+        "```",
+        "",
+        `Session: ${session.id}`,
+      ].join("\n");
 
-    // 4. Create PR if needed (first time only)
-    if (changesExist && session.prNumber === null) {
       const prNumber = await createPR(
         projectPath,
         `[Email] ${job.originalSubject}`,
-        `Automated changes from email thread.\n\nSession: ${session.id}`
+        prBody
       );
 
       // Update session with PR number
       updateSession(ctx.db, session.id, { prNumber });
       result.prNumber = prNumber;
+    } else {
+      // Subsequent email: Add comment to existing PR
+      const comment = [
+        "## Follow-up Request",
+        "",
+        "```",
+        job.prompt,
+        "```",
+        "",
+        "## Claude's Response",
+        "",
+        result.summary,
+      ].join("\n");
+
+      await commentOnPR(projectPath, session.prNumber, comment);
+      result.prNumber = session.prNumber;
     }
 
-    // 5. Get PR URL if prNumber exists
-    const prNumber = result.prNumber ?? session.prNumber;
-    if (prNumber !== null && prNumber !== undefined) {
-      result.prUrl = await getPRUrl(projectPath, prNumber);
-      result.prNumber = prNumber;
+    // 4. Get PR URL
+    if (result.prNumber !== null && result.prNumber !== undefined) {
+      result.prUrl = await getPRUrl(projectPath, result.prNumber);
     }
 
-    // 6. Send success email reply
+    // 5. Send success email reply
     await sendReply(formatSuccessReply(result, job), ctx.fromEmail);
   } catch (error) {
     // On error: send error email reply

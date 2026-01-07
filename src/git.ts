@@ -151,6 +151,16 @@ export async function closePR(projectPath: string, prNumber: number): Promise<vo
 }
 
 /**
+ * Add a comment to a PR
+ */
+export async function commentOnPR(projectPath: string, prNumber: number, body: string): Promise<void> {
+  await runGh(projectPath, [
+    "pr", "comment", prNumber.toString(),
+    "--body", body,
+  ]);
+}
+
+/**
  * Check if there are uncommitted changes
  */
 export async function hasChanges(projectPath: string): Promise<boolean> {
