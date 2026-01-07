@@ -75,9 +75,33 @@ export async function commitAndPush(projectPath: string, message: string): Promi
 }
 
 /**
+ * Get existing PR number for current branch, or null if none exists
+ */
+export async function getExistingPR(projectPath: string): Promise<number | null> {
+  try {
+    const output = await runGh(projectPath, [
+      "pr", "view",
+      "--json", "number",
+      "--jq", ".number",
+    ]);
+    return parseInt(output, 10);
+  } catch {
+    // No PR exists for this branch
+    return null;
+  }
+}
+
+/**
  * Create a PR using gh CLI, return PR number
+ * If a PR already exists for this branch, return the existing PR number
  */
 export async function createPR(projectPath: string, title: string, body: string): Promise<number> {
+  // First check if a PR already exists for this branch
+  const existingPR = await getExistingPR(projectPath);
+  if (existingPR !== null) {
+    return existingPR;
+  }
+
   const output = await runGh(projectPath, [
     "pr", "create",
     "--title", title,

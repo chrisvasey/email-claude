@@ -107,9 +107,16 @@ describe("git module", () => {
   });
 
   describe("createPR", () => {
-    test("parses PR number from gh output", async () => {
+    test("parses PR number from gh output when no existing PR", async () => {
+      let callIndex = 0;
       spawnMock.mockImplementation((cmd: string[], options: { cwd: string }) => {
         spawnCalls.push({ cmd, cwd: options.cwd });
+        callIndex++;
+        // First call: gh pr view (check existing) - fails with exit 1
+        if (callIndex === 1) {
+          return createMockProc("", 1, "no pull requests found");
+        }
+        // Second call: gh pr create - returns PR URL
         return createMockProc("https://github.com/owner/repo/pull/42");
       });
 
@@ -118,15 +125,47 @@ describe("git module", () => {
 
       expect(prNumber).toBe(42);
       expect(spawnCalls[0].cmd).toEqual([
+        "gh", "pr", "view",
+        "--json", "number",
+        "--jq", ".number",
+      ]);
+      expect(spawnCalls[1].cmd).toEqual([
         "gh", "pr", "create",
         "--title", "PR Title",
         "--body", "PR Body",
       ]);
     });
 
-    test("throws when PR number cannot be parsed", async () => {
+    test("returns existing PR number if PR already exists", async () => {
       spawnMock.mockImplementation((cmd: string[], options: { cwd: string }) => {
         spawnCalls.push({ cmd, cwd: options.cwd });
+        // gh pr view returns existing PR number
+        return createMockProc("42");
+      });
+
+      const { createPR } = await import("./git.ts");
+      const prNumber = await createPR("/test/project", "PR Title", "PR Body");
+
+      expect(prNumber).toBe(42);
+      // Should only call gh pr view, not gh pr create
+      expect(spawnCalls.length).toBe(1);
+      expect(spawnCalls[0].cmd).toEqual([
+        "gh", "pr", "view",
+        "--json", "number",
+        "--jq", ".number",
+      ]);
+    });
+
+    test("throws when PR number cannot be parsed", async () => {
+      let callIndex = 0;
+      spawnMock.mockImplementation((cmd: string[], options: { cwd: string }) => {
+        spawnCalls.push({ cmd, cwd: options.cwd });
+        callIndex++;
+        // First call: gh pr view - fails (no existing PR)
+        if (callIndex === 1) {
+          return createMockProc("", 1, "no pull requests found");
+        }
+        // Second call: gh pr create - returns invalid output
         return createMockProc("Invalid output");
       });
 
