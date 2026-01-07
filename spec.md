@@ -15,7 +15,7 @@ Instead of SSH-ing into a VPS from your phone to interact with Claude Code, this
                                                      ▼
 ┌─────────────┐     ┌─────────────────┐     ┌──────────────────┐
 │   Reply     │◀────│  Resend Send    │◀────│  Job Runner      │
-│   Email     │     │  API            │     │  (Deno Scripts)  │
+│   Email     │     │  API            │     │  (Bun Scripts)   │
 └─────────────┘     └─────────────────┘     └────────┬─────────┘
                                                      │
                                                      ▼
@@ -163,9 +163,9 @@ interface EmailReply {
 
 ### VPS Setup
 
-- **OS:** Ubuntu 22.04+ 
-- **Runtime:** Deno 2.x
-- **Dependencies:** 
+- **OS:** Ubuntu 22.04+
+- **Runtime:** Bun 1.x
+- **Dependencies:**
   - Claude Code CLI (authenticated)
   - GitHub CLI (`gh`) authenticated
   - Git configured with SSH keys
@@ -328,19 +328,19 @@ email-claude/
 ├── src/
 │   ├── webhook.ts          # Resend webhook handler
 │   ├── session.ts          # Session management
-│   ├── queue.ts            # Job queue (your existing scripts)
+│   ├── queue.ts            # Job queue (Redis BLPOP)
 │   ├── runner.ts           # Claude Code execution
 │   ├── mailer.ts           # Reply composition & sending
 │   └── config.ts           # Environment config
 ├── db/
-│   └── sessions.db         # SQLite database
+│   └── sessions.db         # SQLite database (bun:sqlite)
 ├── projects/               # Cloned project repos
 │   ├── webapp/
 │   ├── mobile-app/
 │   └── client-site/
 ├── logs/
 │   └── jobs/               # Per-job output logs
-├── deno.json
+├── package.json
 └── .env
 ```
 
@@ -416,28 +416,38 @@ SESSIONS_DB=/home/claude/db/sessions.db
 
 ## Adaptation Notes (from patch-workbench-laravel)
 
-This section documents what was copied from `patch-workbench-laravel/deno-worker/` and what needs to change.
+This section documents what was adapted from `patch-workbench-laravel/deno-worker/` for Bun.
 
-### Copied Files
+### Ported Files
 
-| Source | Destination | Status |
-|--------|-------------|--------|
-| `deno-worker/services/claude-code.ts` | `src/services/claude-code.ts` | Copied with `autoApprove` option added |
-| `deno-worker/worker.ts` | `src/worker.ts` | Copied with email job structure |
-| `deno-worker/deno.json` | `deno.json` | Adapted with new dependencies |
+| Source | Destination | Changes |
+|--------|-------------|---------|
+| `deno-worker/services/claude-code.ts` | `src/services/claude-code.ts` | `Deno.Command` → `Bun.spawn`, added `autoApprove` |
+| `deno-worker/worker.ts` | `src/worker.ts` | `Deno.env` → `process.env`, email job structure |
+| `deno-worker/deno.json` | `package.json` | Bun scripts + npm dependencies |
+
+### API Changes (Deno → Bun)
+
+| Deno | Bun |
+|------|-----|
+| `Deno.Command` | `Bun.spawn` |
+| `Deno.env.get()` | `process.env` |
+| `Deno.serve()` | `Bun.serve()` |
+| `@db/sqlite` (JSR) | `bun:sqlite` (built-in, faster) |
+| `Deno.addSignalListener` | `process.on("SIGINT", ...)` |
 
 ### ClaudeCodeService Changes
 
-The `ClaudeCodeService` class is nearly identical, with one addition:
-
 ```typescript
-// Added option
-autoApprove?: boolean; // Maps to --yes flag
+// Bun subprocess API
+const proc = Bun.spawn(["claude", ...args], {
+  cwd: this.options.cwd,
+  stdout: "pipe",
+  stderr: "pipe",
+});
 
-// In buildArgs():
-if (this.options.autoApprove) {
-  args.push("--yes");
-}
+// Read streaming output
+const reader = proc.stdout.getReader();
 ```
 
 **Usage for email automation:**
@@ -446,7 +456,7 @@ const service = new ClaudeCodeService({
   cwd: `/projects/${projectName}`,
   sessionId: subjectHash,
   resumeSession: hasExistingSession,
-  autoApprove: true, // Always auto-approve for email jobs
+  autoApprove: true, // --yes flag for unattended operation
 });
 ```
 
@@ -463,20 +473,18 @@ The Redis BLPOP pattern is identical. Key differences:
 
 ### Files Still Needed
 
-These files need to be created (not copied):
-
-- [ ] `src/webhook.ts` - Resend inbound email webhook handler
-- [ ] `src/session.ts` - SQLite session manager
+- [ ] `src/webhook.ts` - Resend inbound webhook (`Bun.serve`)
+- [ ] `src/session.ts` - SQLite session manager (`bun:sqlite`)
 - [ ] `src/mailer.ts` - Resend email sender
 - [ ] `src/handlers/email-job.ts` - Email job processor
 - [ ] `src/config.ts` - Environment configuration
 
 ### Implementation Checklist
 
-**Phase 1 - MVP (adapt existing code):**
-- [x] Copy `ClaudeCodeService` with `--yes` flag
-- [x] Copy Redis BLPOP worker structure
-- [x] Create `deno.json` with dependencies
+**Phase 1 - MVP:**
+- [x] Port `ClaudeCodeService` to Bun APIs
+- [x] Port Redis BLPOP worker to Bun
+- [x] Create `package.json` with dependencies
 - [ ] Create `src/webhook.ts` - HTTP server for Resend webhooks
 - [ ] Create `src/session.ts` - SQLite session CRUD
 - [ ] Create `src/handlers/email-job.ts` - Wire up ClaudeCodeService

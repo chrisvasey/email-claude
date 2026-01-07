@@ -4,13 +4,20 @@
  * This service wraps the local Claude Code CLI and provides a programmatic
  * interface for sending prompts and receiving responses via JSON communication.
  *
- * Adapted from: deno-worker/services/claude-code.ts
+ * Ported from: deno-worker/services/claude-code.ts (Deno → Bun)
  */
 
+import type { Subprocess } from "bun";
+
 export interface ClaudeCodeMessage {
-  type: "user" | "assistant" | "tool_use" | "tool_result" | "error";
-  from: "user" | "assistant";
-  content: string;
+  type: "user" | "assistant" | "tool_use" | "tool_result" | "error" | "result";
+  from?: "user" | "assistant";
+  content?: string;
+  message?: {
+    content: Array<{ type: string; text?: string }>;
+  };
+  result?: string;
+  error?: string;
   timestamp?: Date;
   tool_name?: string;
   tool_input?: unknown;
@@ -23,13 +30,11 @@ export interface ClaudeCodeOptions {
   permissionMode?: "ask" | "acceptEdits" | "acceptAll";
   sessionId?: string;
   resumeSession?: boolean;
-  autoApprove?: boolean; // NEW: --yes flag for email automation
+  autoApprove?: boolean; // --yes flag for email automation
 }
 
 export class ClaudeCodeService {
-  private process: Deno.ChildProcess | null = null;
-  private reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
-  private writer: WritableStreamDefaultWriter<Uint8Array> | null = null;
+  private process: Subprocess | null = null;
   private buffer = "";
   private messageCallbacks: Set<(message: ClaudeCodeMessage) => void> =
     new Set();
@@ -93,17 +98,12 @@ export class ClaudeCodeService {
     console.log(`[ClaudeCode] Starting with args:`, args.slice(0, -1), `"${prompt.substring(0, 50)}..."`);
     console.log(`[ClaudeCode] Working directory:`, this.options.cwd);
 
-    // Spawn the claude CLI
-    const command = new Deno.Command("claude", {
-      args,
-      stdin: "null",
-      stdout: "piped",
-      stderr: "piped",
+    // Spawn the claude CLI using Bun
+    this.process = Bun.spawn(["claude", ...args], {
       cwd: this.options.cwd,
+      stdout: "pipe",
+      stderr: "pipe",
     });
-
-    this.process = command.spawn();
-    this.reader = this.process.stdout.getReader();
 
     // Start reading stderr for debugging
     this.readStderr();
@@ -118,14 +118,14 @@ export class ClaudeCodeService {
    * Read stderr for debugging
    */
   private async readStderr(): Promise<void> {
-    if (!this.process) return;
+    if (!this.process?.stderr) return;
 
-    const stderrReader = this.process.stderr.getReader();
+    const reader = this.process.stderr.getReader();
     const decoder = new TextDecoder();
 
     try {
       while (true) {
-        const { done, value } = await stderrReader.read();
+        const { done, value } = await reader.read();
         if (done) break;
 
         const text = decoder.decode(value, { stream: true });
@@ -142,13 +142,14 @@ export class ClaudeCodeService {
    * Read and parse JSON output from Claude Code CLI
    */
   private async readOutput(): Promise<void> {
-    if (!this.reader) return;
+    if (!this.process?.stdout) return;
 
+    const reader = this.process.stdout.getReader();
     const decoder = new TextDecoder();
 
     try {
       while (true) {
-        const { done, value } = await this.reader.read();
+        const { done, value } = await reader.read();
         if (done) break;
 
         this.buffer += decoder.decode(value, { stream: true });
@@ -184,19 +185,6 @@ export class ClaudeCodeService {
       });
       this.notifyComplete();
     }
-  }
-
-  /**
-   * Send a prompt to Claude Code
-   */
-  async query(prompt: string): Promise<void> {
-    if (!this.writer) {
-      throw new Error("Claude Code service not started");
-    }
-
-    const message = JSON.stringify({ prompt }) + "\n";
-    const encoder = new TextEncoder();
-    await this.writer.write(encoder.encode(message));
   }
 
   /**
@@ -245,28 +233,10 @@ export class ClaudeCodeService {
    * Stop the Claude Code CLI process
    */
   async stop(): Promise<void> {
-    if (this.reader) {
-      try {
-        await this.reader.cancel();
-      } catch {
-        // Ignore errors
-      }
-      this.reader = null;
-    }
-
-    if (this.writer) {
-      try {
-        await this.writer.close();
-      } catch {
-        // Ignore errors
-      }
-      this.writer = null;
-    }
-
     if (this.process) {
       try {
-        this.process.kill("SIGTERM");
-        await this.process.status;
+        this.process.kill();
+        await this.process.exited;
       } catch {
         // Ignore errors
       }

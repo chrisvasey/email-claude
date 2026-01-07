@@ -1,56 +1,92 @@
 /**
- * Deno Worker for Email-Driven Claude Code
+ * Bun Worker for Email-Driven Claude Code
  *
  * This worker connects to Redis via BLPOP to efficiently wait for new jobs
  * and processes them using the Claude Code CLI, sending email replies.
  *
- * Adapted from: deno-worker/worker.ts
+ * Ported from: deno-worker/worker.ts (Deno → Bun)
  */
 
-import { createClient } from "npm:redis@4";
-// TODO: Import handlers when implemented
-// import { handleEmailJob } from "./handlers/email-job.ts";
+import { createClient } from "redis";
+import { Database } from "bun:sqlite";
+import { handleEmailJob, type JobContext } from "./handlers/email-job";
+import { initDb, getSession, type Session } from "./session";
+import { config } from "./config";
+import type { EmailJob } from "./mailer";
 
-const REDIS_URL = Deno.env.get("REDIS_URL") || "redis://localhost:6379";
-const REDIS_PREFIX = Deno.env.get("REDIS_PREFIX") || "email_claude_";
+const REDIS_URL = config.redis.url;
+const REDIS_PREFIX = config.redis.prefix;
 const QUEUE_NAME = `${REDIS_PREFIX}jobs:pending`;
 
-// Email-specific job interface (replaces Laravel job structure)
-interface EmailJob {
-  id: string;
-  sessionId: string;
-  project: string;
-  prompt: string;
-  replyTo: string; // sender email
-  originalSubject: string;
-  messageId: string; // for In-Reply-To header
-  resumeSession: boolean;
-  attachments?: string[]; // paths to saved attachments
-  createdAt: string;
+// Database instance
+let db: Database | null = null;
+
+/**
+ * Get or initialize the database
+ */
+function getDb(): Database {
+  if (!db) {
+    db = initDb(config.paths.sessionsDb);
+  }
+  return db;
 }
 
-// TODO: Replace with SQLite session storage
-async function fetchJob(jobId: string): Promise<EmailJob | null> {
-  // Placeholder: Will be implemented with SQLite
-  console.log(`[Worker] TODO: Fetch job ${jobId} from SQLite`);
-  return null;
+/**
+ * Get session from database by ID
+ */
+function getSessionById(sessionId: string): Session | null {
+  const database = getDb();
+  const stmt = database.prepare(`
+    SELECT
+      id,
+      subject_hash as subjectHash,
+      project,
+      branch_name as branchName,
+      claude_session_id as claudeSessionId,
+      pr_number as prNumber,
+      created_at as createdAt,
+      last_activity as lastActivity
+    FROM sessions
+    WHERE id = ?
+  `);
+  return stmt.get(sessionId) as Session | null;
 }
 
-// TODO: Implement email job processing
+/**
+ * Process an email job
+ */
 async function processJob(job: EmailJob): Promise<void> {
   console.log(`[Worker] Processing email job ${job.id}`);
   console.log(`[Worker] Project: ${job.project}`);
   console.log(`[Worker] Reply to: ${job.replyTo}`);
   console.log(`[Worker] Subject: ${job.originalSubject}`);
 
-  // TODO: Implement with handleEmailJob handler
-  // await handleEmailJob(job);
+  // Get session from database
+  const session = getSessionById(job.sessionId);
+  if (!session) {
+    throw new Error(`Session ${job.sessionId} not found`);
+  }
+
+  // Create job context
+  const ctx: JobContext = {
+    db: getDb(),
+    projectsDir: config.paths.projectsDir,
+    fromEmail: config.resend.fromEmail,
+  };
+
+  // Handle the job
+  await handleEmailJob(job, session, ctx);
 }
 
 async function runWorker(): Promise<void> {
-  console.log("[Worker] Starting Email-Claude Deno worker...");
+  console.log("[Worker] Starting Email-Claude Bun worker...");
   console.log(`[Worker] Redis URL: ${REDIS_URL}`);
   console.log(`[Worker] Queue: ${QUEUE_NAME}`);
+  console.log(`[Worker] Projects dir: ${config.paths.projectsDir}`);
+
+  // Initialize database
+  getDb();
+  console.log("[Worker] Database initialized");
 
   const redis = createClient({ url: REDIS_URL });
 
@@ -69,42 +105,52 @@ async function runWorker(): Promise<void> {
       const result = await redis.blPop(QUEUE_NAME, 30);
 
       if (result) {
-        const jobId = result.element;
-        console.log(`[Worker] Received job ID: ${jobId}`);
+        // Parse job JSON from Redis (webhook pushes full job object)
+        let job: EmailJob;
+        try {
+          job = JSON.parse(result.element);
+        } catch {
+          console.error(`[Worker] Invalid job JSON: ${result.element}`);
+          continue;
+        }
+
+        console.log(`[Worker] Received job: ${job.id}`);
 
         try {
-          const job = await fetchJob(jobId);
-          if (job) {
-            await processJob(job);
-          } else {
-            console.error(`[Worker] Job ${jobId} not found`);
-          }
+          await processJob(job);
+          console.log(`[Worker] Job ${job.id} completed successfully`);
         } catch (error) {
-          console.error(`[Worker] Error processing job ${jobId}:`, error);
-          // TODO: Implement error handling (send error email, update job status)
+          console.error(`[Worker] Error processing job ${job.id}:`, error);
+          // Error email is sent by handleEmailJob, just log here
         }
       }
     } catch (error) {
       console.error("[Worker] Error in main loop:", error);
       // Back off on error
-      await new Promise((r) => setTimeout(r, 5000));
+      await Bun.sleep(5000);
     }
   }
 }
 
 // Handle shutdown gracefully
-Deno.addSignalListener("SIGINT", () => {
+process.on("SIGINT", () => {
   console.log("[Worker] Received SIGINT, shutting down...");
-  Deno.exit(0);
+  if (db) {
+    db.close();
+  }
+  process.exit(0);
 });
 
-Deno.addSignalListener("SIGTERM", () => {
+process.on("SIGTERM", () => {
   console.log("[Worker] Received SIGTERM, shutting down...");
-  Deno.exit(0);
+  if (db) {
+    db.close();
+  }
+  process.exit(0);
 });
 
 // Start the worker
 runWorker().catch((error) => {
   console.error("[Worker] Fatal error:", error);
-  Deno.exit(1);
+  process.exit(1);
 });

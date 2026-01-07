@@ -1,0 +1,19 @@
+{
+  "name": "email-claude",
+  "version": "0.1.0",
+  "description": "Command Claude Code via email",
+  "type": "module",
+  "scripts": {
+    "start": "bun run src/worker.ts",
+    "dev": "bun --watch run src/worker.ts",
+    "webhook": "bun run src/webhook.ts",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "redis": "^4.7.0",
+    "resend": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  }
+}

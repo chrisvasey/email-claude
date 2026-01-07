@@ -5,7 +5,7 @@ Command Claude Code via email. Send a task, receive a PR link and preview URL in
 ## Architecture
 
 ```
-Email → Resend Webhook → Deno Worker → Claude Code → GitHub PR → Email Reply
+Email → Resend Webhook → Bun Worker → Claude Code → GitHub PR → Email Reply
 ```
 
 See [spec.md](./spec.md) for full design documentation.
@@ -14,8 +14,8 @@ See [spec.md](./spec.md) for full design documentation.
 
 ### Prerequisites
 
-- Deno 2.x
-- Redis
+- Bun 1.x (`curl -fsSL https://bun.sh/install | bash`)
+- Redis (via Laravel Herd or standalone)
 - Claude Code CLI (authenticated)
 - GitHub CLI (`gh`) authenticated
 - Resend account with inbound email configured
@@ -42,17 +42,23 @@ PROJECTS_DIR=/home/claude/projects
 SESSIONS_DB=./db/sessions.db
 ```
 
+### Install Dependencies
+
+```bash
+bun install
+```
+
 ### Running
 
 ```bash
 # Start the worker (processes jobs from Redis queue)
-deno task start
+bun run start
 
 # Development mode with watch
-deno task dev
+bun run dev
 
 # Start webhook server (receives emails from Resend)
-deno task webhook
+bun run webhook
 ```
 
 ## Project Structure
@@ -61,48 +67,60 @@ deno task webhook
 email-claude/
 ├── src/
 │   ├── services/
-│   │   └── claude-code.ts    # Claude CLI wrapper
+│   │   └── claude-code.ts    # Claude CLI wrapper (Bun.spawn)
 │   ├── handlers/
-│   │   └── email-job.ts      # Email job processor (TODO)
+│   │   └── email-job.ts      # Email job processor
 │   ├── worker.ts             # Redis queue consumer
-│   ├── webhook.ts            # Resend webhook handler (TODO)
-│   ├── session.ts            # SQLite session manager (TODO)
-│   └── mailer.ts             # Email reply composer (TODO)
+│   ├── webhook.ts            # Resend webhook handler (Bun.serve)
+│   ├── session.ts            # SQLite session manager (bun:sqlite)
+│   ├── mailer.ts             # Email reply composer (Resend API)
+│   ├── git.ts                # Git/GitHub CLI utilities
+│   └── config.ts             # Environment configuration
 ├── db/
-│   └── sessions.db           # SQLite database
-├── logs/
-│   └── jobs/                 # Per-job output logs
-├── deno.json
+│   └── sessions.db           # SQLite database (created on first run)
+├── package.json
 ├── spec.md                   # Full specification
 └── README.md
 ```
 
 ## Reused Code
 
-The following was adapted from `patch-workbench-laravel/deno-worker/`:
+Ported from `patch-workbench-laravel/deno-worker/` (Deno → Bun):
 
 | File | Source | Changes |
 |------|--------|---------|
-| `src/services/claude-code.ts` | `deno-worker/services/claude-code.ts` | Added `autoApprove` option for `--yes` flag |
-| `src/worker.ts` | `deno-worker/worker.ts` | Replaced Laravel callbacks with email job structure |
+| `src/services/claude-code.ts` | `deno-worker/services/claude-code.ts` | `Deno.Command` → `Bun.spawn`, added `autoApprove` |
+| `src/worker.ts` | `deno-worker/worker.ts` | `Deno.env` → `process.env`, email job structure |
+
+## Testing
+
+```bash
+# Run all tests
+bun test
+
+# Run specific test file
+bun test src/config.test.ts
+```
 
 ## Implementation Status
 
-### Phase 1: Basic Flow (MVP)
-- [ ] Resend inbound webhook
-- [ ] Single project support
-- [ ] New sessions only (no resume)
-- [ ] Plain text replies
-- [ ] Manual PR creation
+### Phase 1: Basic Flow (MVP) - Complete
+- [x] Resend inbound webhook (`src/webhook.ts`)
+- [x] Single project support
+- [x] Session tracking with SQLite (`src/session.ts`)
+- [x] Plain text email replies (`src/mailer.ts`)
+- [x] Auto PR creation via `gh` CLI (`src/git.ts`)
+- [x] Email job processing (`src/handlers/email-job.ts`)
+- [x] Full test coverage (105 tests)
 
 ### Phase 2: Sessions & Threading
-- [ ] Subject-based session tracking
+- [x] Subject-based session tracking (via subject hash)
 - [ ] `claude --resume` integration
-- [ ] Proper email threading (In-Reply-To headers)
-- [ ] SQLite session storage
+- [x] Proper email threading (In-Reply-To headers)
+- [x] SQLite session storage
 
 ### Phase 3: Polish
-- [ ] HTML email replies
+- [ ] HTML email replies with syntax highlighting
 - [ ] Preview deployment URL extraction
-- [ ] Attachment handling
+- [ ] Attachment handling (images to Claude vision)
 - [ ] Error handling & retry logic
