@@ -7,7 +7,9 @@
     "start": "bun run src/worker.ts",
     "dev": "bun --watch run src/worker.ts",
     "webhook": "bun run src/webhook.ts",
-    "test": "bun test"
+    "test": "bun test src/services/repo.test.ts && bun test src/config.test.ts src/git.test.ts src/handlers/email-job.test.ts src/mailer.test.ts src/session.test.ts src/webhook.test.ts",
+    "test:repo": "bun test src/services/repo.test.ts",
+    "test:other": "bun test src/config.test.ts src/git.test.ts src/handlers/email-job.test.ts src/mailer.test.ts src/session.test.ts src/webhook.test.ts"
   },
   "dependencies": {
     "redis": "^4.7.0",

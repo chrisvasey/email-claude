@@ -377,16 +377,18 @@ email-claude/
 ## Environment Variables
 
 ```bash
+# Redis
+REDIS_URL=redis://localhost:6379
+REDIS_PREFIX=email_claude_
+
 # Resend
 RESEND_API_KEY=re_xxxxx
 RESEND_WEBHOOK_SECRET=whsec_xxxxx
 RESEND_FROM_EMAIL=claude@code.patch.agency
 
-# GitHub  
-GITHUB_TOKEN=ghp_xxxxx
-
-# Claude
-ANTHROPIC_API_KEY=sk-ant-xxxxx
+# GitHub
+# Owner/org for auto-cloning: email-claude@domain -> github.com/GITHUB_OWNER/email-claude
+GITHUB_OWNER=chrisvasey
 
 # Security
 ALLOWED_SENDERS=chris@patch.agency,grace@patch.agency
@@ -394,7 +396,88 @@ ALLOWED_SENDERS=chris@patch.agency,grace@patch.agency
 # Paths
 PROJECTS_DIR=/home/claude/projects
 SESSIONS_DB=/home/claude/db/sessions.db
+
+# Server
+WEBHOOK_PORT=8080
+
+# Development
+DEV_MODE=false
 ```
+
+## Docker Deployment
+
+The service can run in Docker while storing project repos on the host filesystem.
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                         VPS Host                             │
+├─────────────────────────────────────────────────────────────┤
+│  ~/.ssh/          (SSH keys for git)                        │
+│  ~/.claude/       (Claude Code auth)                        │
+│  ~/.config/gh/    (GitHub CLI auth)                         │
+│  /projects/       (Cloned repos - persists on host)         │
+│                                                             │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │                   Docker Compose                      │   │
+│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐          │   │
+│  │  │ webhook  │  │  worker  │  │  redis   │          │   │
+│  │  │ :8080    │  │          │  │  :6379   │          │   │
+│  │  └────┬─────┘  └────┬─────┘  └──────────┘          │   │
+│  │       │             │                               │   │
+│  │       └─────────────┴───── mounts ─────────────────│   │
+│  └─────────────────────────────────────────────────────┘   │
+│                            │                                │
+│                            ▼                                │
+│              /projects/email-claude/                        │
+│              /projects/webapp/                              │
+│              /projects/api/                                 │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Auto-Clone Behavior
+
+When an email arrives for a project that doesn't exist locally:
+
+1. Extract project name from recipient: `email-claude@code.patch.agency` → `email-claude`
+2. Build clone URL: `git@github.com:${GITHUB_OWNER}/email-claude.git`
+3. Clone to `${PROJECTS_DIR}/email-claude`
+4. Continue with normal job processing
+
+### Volume Mounts
+
+| Host Path | Container Path | Purpose |
+|-----------|----------------|---------|
+| `${PROJECTS_DIR}` | `/projects` | Git repos (read/write) |
+| `~/.ssh` | `/root/.ssh` | SSH keys for git (read-only) |
+| `~/.claude` | `/root/.claude` | Claude Code auth (read-only) |
+| `~/.config/gh` | `/root/.config/gh` | GitHub CLI auth (read-only) |
+| `./db` | `/app/db` | SQLite database (read/write) |
+
+### Quick Start
+
+```bash
+# 1. Copy environment file
+cp .env.example .env
+# Edit .env with your values
+
+# 2. Start services
+docker compose up -d
+
+# 3. Check logs
+docker compose logs -f worker
+```
+
+### VPS Setup Checklist
+
+Before running Docker:
+
+- [ ] SSH keys configured (`~/.ssh/id_rsa` or similar)
+- [ ] GitHub CLI authenticated (`gh auth login`)
+- [ ] Claude Code authenticated (`claude auth`)
+- [ ] Projects directory exists (`mkdir -p /home/claude/projects`)
+- [ ] Firewall allows port 8080 (or your webhook port)
 
 ## Prior Art & References
 

@@ -83,6 +83,15 @@ mock.module("../session", () => ({
   getSessionMessages: (...args: unknown[]) => mockGetSessionMessages(...args),
 }));
 
+// Mock ensureRepo to always succeed (repo exists)
+mock.module("../services/repo", () => ({
+  ensureRepo: (project: string, projectsDir: string) => {
+    return Promise.resolve(`${projectsDir}/${project}`);
+  },
+  getRepoUrl: (project: string, owner: string) => `git@github.com:${owner}/${project}.git`,
+  repoExists: () => Promise.resolve(true),
+}));
+
 describe("email-job handler", () => {
   let db: Database;
   let ctx: JobContext;
@@ -147,6 +156,7 @@ describe("email-job handler", () => {
       db,
       projectsDir: "/projects",
       fromEmail: "claude@example.com",
+      githubOwner: "testowner",
     };
 
     job = {

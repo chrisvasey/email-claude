@@ -22,7 +22,7 @@ See [spec.md](./spec.md) for full design documentation.
 
 ### Environment Variables
 
-Create a `.env` file:
+Create a `.env` file (see `.env.example`):
 
 ```bash
 # Redis
@@ -33,6 +33,10 @@ REDIS_PREFIX=email_claude_
 RESEND_API_KEY=re_xxxxx
 RESEND_WEBHOOK_SECRET=whsec_xxxxx
 RESEND_FROM_EMAIL=claude@code.patch.agency
+
+# GitHub (for auto-cloning repos)
+# email-claude@code.patch.agency -> github.com/GITHUB_OWNER/email-claude
+GITHUB_OWNER=chrisvasey
 
 # Security
 ALLOWED_SENDERS=chris@patch.agency,grace@patch.agency
@@ -124,9 +128,47 @@ bun test src/config.test.ts
 - [x] Follow-up emails add comments to existing PR
 - [x] Atomic commits via system instructions (`prompts/system.md`)
 
-### Phase 3: Polish
+### Phase 3: Polish - In Progress
+- [x] Auto-clone repos (`GITHUB_OWNER` config)
+- [x] Docker deployment (`Dockerfile`, `docker-compose.yml`)
 - [ ] `claude --resume` integration (multi-turn conversations)
 - [ ] Preview deployment URL extraction
 - [ ] Attachment handling (images to Claude vision)
 - [ ] Error handling & retry logic
 - [ ] Special commands ([merge], [close], [status])
+
+## Docker Deployment
+
+Run the service in Docker while storing repos on the host filesystem:
+
+```bash
+# 1. Copy and edit environment file
+cp .env.example .env
+
+# 2. Ensure auth is configured on host
+# - SSH keys in ~/.ssh/
+# - Claude Code: claude auth
+# - GitHub CLI: gh auth login
+
+# 3. Start services
+docker compose up -d
+
+# 4. Check logs
+docker compose logs -f worker
+```
+
+### Volume Mounts
+
+| Host | Container | Purpose |
+|------|-----------|---------|
+| `${PROJECTS_DIR}` | `/projects` | Git repos |
+| `~/.ssh` | `/root/.ssh` | SSH keys (ro) |
+| `~/.claude` | `/root/.claude` | Claude auth (ro) |
+| `~/.config/gh` | `/root/.config/gh` | GitHub CLI (ro) |
+
+### Auto-Clone
+
+Projects are automatically cloned on first email:
+- `email-claude@code.patch.agency` → clones `github.com/${GITHUB_OWNER}/email-claude`
+
+No need to pre-clone repos!

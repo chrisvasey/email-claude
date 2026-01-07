@@ -14,6 +14,9 @@ export interface Config {
     webhookSecret: string;
     fromEmail: string;
   };
+  github: {
+    owner: string;
+  };
   security: {
     allowedSenders: string[];
   };
@@ -38,6 +41,9 @@ export function loadConfig(): Config {
       apiKey: process.env.RESEND_API_KEY || "",
       webhookSecret: process.env.RESEND_WEBHOOK_SECRET || "",
       fromEmail: process.env.RESEND_FROM_EMAIL || "claude@code.patch.agency",
+    },
+    github: {
+      owner: process.env.GITHUB_OWNER || "",
     },
     security: {
       allowedSenders: (process.env.ALLOWED_SENDERS || "")

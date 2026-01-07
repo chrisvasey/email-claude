@@ -72,6 +72,7 @@ async function processJob(job: EmailJob): Promise<void> {
     db: getDb(),
     projectsDir: config.paths.projectsDir,
     fromEmail: config.resend.fromEmail,
+    githubOwner: config.github.owner,
   };
 
   // Handle the job

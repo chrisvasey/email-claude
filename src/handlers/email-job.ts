@@ -20,6 +20,7 @@ import {
   commentOnPR,
   hasCommitsAhead,
 } from "../git";
+import { ensureRepo } from "../services/repo";
 import {
   sendReply,
   formatSuccessReply,
@@ -39,6 +40,7 @@ export interface JobContext {
   db: Database;
   projectsDir: string;
   fromEmail: string;
+  githubOwner: string;
 }
 
 /**
@@ -52,20 +54,23 @@ export async function handleEmailJob(
   const projectPath = `${ctx.projectsDir}/${job.project}`;
 
   try {
-    // 1. Setup git branch
+    // 1. Ensure repo exists (clone if needed)
+    await ensureRepo(job.project, ctx.projectsDir, ctx.githubOwner);
+
+    // 2. Setup git branch
     await ensureBranch(projectPath, session.branchName);
 
-    // 2. Save user's message to conversation history
+    // 3. Save user's message to conversation history
     addSessionMessage(ctx.db, session.id, "user", job.prompt);
 
-    // 3. Run Claude Code with prompt (includes system instructions for atomic commits)
+    // 4. Run Claude Code with prompt (includes system instructions for atomic commits)
     const fullPrompt = buildFullPrompt(job.prompt);
     const result = await runClaude(projectPath, fullPrompt, session);
 
-    // 4. Save Claude's response to conversation history
+    // 5. Save Claude's response to conversation history
     addSessionMessage(ctx.db, session.id, "assistant", result.summary);
 
-    // 5. Handle PR creation or commenting (only if there are commits)
+    // 6. Handle PR creation or commenting (only if there are commits)
     const hasCommits = await hasCommitsAhead(projectPath);
 
     if (hasCommits) {
@@ -116,13 +121,13 @@ export async function handleEmailJob(
         result.prNumber = session.prNumber;
       }
 
-      // 6. Get PR URL
+      // 7. Get PR URL
       if (result.prNumber !== null && result.prNumber !== undefined) {
         result.prUrl = await getPRUrl(projectPath, result.prNumber);
       }
     }
 
-    // 7. Send success email reply
+    // 8. Send success email reply
     await sendReply(formatSuccessReply(result, job), ctx.fromEmail);
   } catch (error) {
     // On error: send error email reply

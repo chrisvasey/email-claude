@@ -356,7 +356,11 @@ const prUrl = await getPRUrl(projectPath, session.prNumber);
 
 ---
 
-## Phase 4: Polish - TODO
+## Phase 4: Polish - IN PROGRESS
+
+### Completed
+- [x] Auto-clone repos (GITHUB_OWNER config, `src/services/repo.ts`)
+- [x] Docker deployment (`Dockerfile`, `docker-compose.yml`)
 
 ### Remaining Items
 - [ ] `claude --resume` integration for multi-turn conversations
@@ -454,6 +458,8 @@ webhook.ts (config, session, queue)
 
 ## Deployment Checklist
 
+### Option A: Direct Deployment (without Docker)
+
 - [ ] VPS with Bun installed (`curl -fsSL https://bun.sh/install | bash`)
 - [ ] Redis running
 - [ ] Claude Code CLI authenticated (`claude auth`)
@@ -462,6 +468,20 @@ webhook.ts (config, session, queue)
 - [ ] Resend inbound domain configured
 - [ ] MX records pointing to Resend
 - [ ] Webhook URL accessible (HTTPS)
-- [ ] Projects cloned to `PROJECTS_DIR`
 - [ ] Environment variables set in `.env`
 - [ ] Systemd services for worker + webhook
+
+### Option B: Docker Deployment (recommended)
+
+- [ ] Docker and Docker Compose installed
+- [ ] SSH keys configured (`~/.ssh/`)
+- [ ] Claude Code CLI authenticated (`~/.claude/`)
+- [ ] GitHub CLI authenticated (`~/.config/gh/`)
+- [ ] Resend inbound domain configured
+- [ ] MX records pointing to Resend
+- [ ] Environment variables set in `.env`
+- [ ] `GITHUB_OWNER` set for auto-clone
+- [ ] Projects directory created (`mkdir -p /home/claude/projects`)
+- [ ] Run `docker compose up -d`
+
+Note: Projects are auto-cloned on first email - no need to pre-clone repos!
