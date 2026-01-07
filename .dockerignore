@@ -1,0 +1,43 @@
+# Dependencies
+node_modules
+
+# Database
+db/*.db
+db/*.db-journal
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Git
+.git
+.gitignore
+
+# Documentation (not needed in container)
+*.md
+docs/
+
+# Logs
+*.log
+logs/
+
+# Projects directory (mounted as volume)
+projects/
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test artifacts
+coverage/
+.nyc_output/
+
+# Plan files
+.claude/

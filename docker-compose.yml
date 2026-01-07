@@ -1,0 +1,69 @@
+services:
+  webhook:
+    build: .
+    command: bun run webhook
+    ports:
+      - "${WEBHOOK_PORT:-8080}:8080"
+    volumes:
+      # Mount projects directory (code lives on host filesystem)
+      - ${PROJECTS_DIR:-./projects}:/projects
+      # Mount SSH keys for git operations (read-only)
+      - ${HOME}/.ssh:/root/.ssh:ro
+      # Mount Claude Code auth (read-only)
+      - ${HOME}/.claude:/root/.claude:ro
+      # Mount GitHub CLI config (read-only)
+      - ${HOME}/.config/gh:/root/.config/gh:ro
+      # Persist SQLite database
+      - ./db:/app/db
+    environment:
+      - PROJECTS_DIR=/projects
+      - SESSIONS_DB=/app/db/sessions.db
+      - REDIS_URL=redis://redis:6379
+      - REDIS_PREFIX=${REDIS_PREFIX:-email_claude_}
+      - RESEND_API_KEY
+      - RESEND_WEBHOOK_SECRET
+      - RESEND_FROM_EMAIL
+      - ALLOWED_SENDERS
+      - GITHUB_OWNER
+      - DEV_MODE=${DEV_MODE:-false}
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  worker:
+    build: .
+    command: bun run start
+    volumes:
+      # Mount projects directory (code lives on host filesystem)
+      - ${PROJECTS_DIR:-./projects}:/projects
+      # Mount SSH keys for git operations (read-only)
+      - ${HOME}/.ssh:/root/.ssh:ro
+      # Mount Claude Code auth (read-only)
+      - ${HOME}/.claude:/root/.claude:ro
+      # Mount GitHub CLI config (read-only)
+      - ${HOME}/.config/gh:/root/.config/gh:ro
+      # Persist SQLite database
+      - ./db:/app/db
+    environment:
+      - PROJECTS_DIR=/projects
+      - SESSIONS_DB=/app/db/sessions.db
+      - REDIS_URL=redis://redis:6379
+      - REDIS_PREFIX=${REDIS_PREFIX:-email_claude_}
+      - RESEND_API_KEY
+      - RESEND_WEBHOOK_SECRET
+      - RESEND_FROM_EMAIL
+      - ALLOWED_SENDERS
+      - GITHUB_OWNER
+      - DEV_MODE=${DEV_MODE:-false}
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+
+volumes:
+  redis-data:
