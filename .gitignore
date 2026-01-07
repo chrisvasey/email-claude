@@ -1,0 +1,20 @@
+# Environment
+.env
+
+# Database
+db/*.db
+db/*.db-journal
+
+# Logs
+logs/*
+!logs/.gitkeep
+
+# Deno
+.deno/
+deno.lock
+
+# Projects (cloned repos)
+projects/
+
+# OS
+.DS_Store

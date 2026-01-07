@@ -1,0 +1,493 @@
+# Email-Driven Claude Code
+
+**A system for commanding Claude Code via email, receiving PRs and preview links in response.**
+
+## Overview
+
+Instead of SSH-ing into a VPS from your phone to interact with Claude Code, this approach uses email as the interface. Send an email describing what you want built or changed, and receive a reply with what was done, a PR link, and a preview deployment URL.
+
+```
+┌─────────────┐     ┌─────────────────┐     ┌──────────────────┐
+│   Email     │────▶│  Resend Inbound │────▶│  VPS Webhook     │
+│   Client    │     │  (MX Records)   │     │  Handler         │
+└─────────────┘     └─────────────────┘     └────────┬─────────┘
+                                                     │
+                                                     ▼
+┌─────────────┐     ┌─────────────────┐     ┌──────────────────┐
+│   Reply     │◀────│  Resend Send    │◀────│  Job Runner      │
+│   Email     │     │  API            │     │  (Deno Scripts)  │
+└─────────────┘     └─────────────────┘     └────────┬─────────┘
+                                                     │
+                                                     ▼
+                                            ┌──────────────────┐
+                                            │  Claude Code     │
+                                            │  (--yes mode)    │
+                                            └────────┬─────────┘
+                                                     │
+                                                     ▼
+                                            ┌──────────────────┐
+                                            │  GitHub PR +     │
+                                            │  Preview Deploy  │
+                                            └──────────────────┘
+```
+
+## Key Design Decisions
+
+### Session Per Subject Line
+
+The email subject acts as a session identifier. All replies to the same thread continue the same Claude Code session, enabling multi-turn conversations:
+
+```
+Subject: projectname - Add dark mode toggle
+────────────────────────────────────────────
+Email 1: "Add a dark mode toggle to the settings page"
+  └── Claude works, creates PR, replies with link
+
+Email 2 (reply): "Actually make it persist to localStorage"
+  └── Claude resumes session, updates PR, replies
+
+Email 3 (reply): "Looks good, merge it"
+  └── Claude merges PR, replies with confirmation
+```
+
+### Project Routing
+
+The "To" address determines which project to work on:
+
+- `webapp@code.patch.agency` → `/projects/webapp`
+- `mobile-app@code.patch.agency` → `/projects/mobile-app`
+- `client-site@code.patch.agency` → `/projects/client-site`
+
+## Components to Build
+
+### 1. Inbound Email Handler (Webhook)
+
+**Location:** VPS running Deno
+
+**Responsibilities:**
+- Receive webhook POST from Resend
+- Validate webhook signature (security)
+- Parse sender, subject, body, attachments
+- Extract project name from "to" address
+- Generate/lookup session ID from subject line hash
+- Queue job for processing
+
+```typescript
+// POST /webhook/email
+interface InboundEmail {
+  from: string;
+  to: string;
+  subject: string;
+  text: string;
+  html: string;
+  attachments: Attachment[];
+  headers: Record<string, string>;
+}
+```
+
+### 2. Session Manager
+
+**Responsibilities:**
+- Map subject lines to Claude Code session IDs
+- Store session state (project path, branch name, PR number)
+- Handle session resumption with `claude --resume`
+
+```typescript
+interface Session {
+  id: string;
+  subjectHash: string;
+  project: string;
+  branchName: string;
+  prNumber?: number;
+  createdAt: Date;
+  lastActivity: Date;
+}
+```
+
+**Storage:** SQLite file on VPS (simple, no external deps)
+
+### 3. Job Queue Integration
+
+**Leverages:** Your existing Deno job queue scripts
+
+**Job payload:**
+```typescript
+interface ClaudeJob {
+  sessionId: string;
+  project: string;
+  prompt: string;
+  replyTo: string;        // sender email
+  originalSubject: string;
+  resumeSession: boolean;
+  attachments?: string[]; // paths to saved attachments
+}
+```
+
+### 4. Claude Code Runner
+
+**Responsibilities:**
+- Execute Claude Code in project directory
+- Capture output (summary, file changes, PR URL)
+- Handle errors gracefully
+- Create/update PRs via `gh` CLI
+
+```bash
+# New session
+cd /projects/$PROJECT
+git checkout -b email/$SESSION_ID
+claude -p "$PROMPT" --yes --output-format json
+
+# Resume session  
+claude --resume $SESSION_ID -p "$PROMPT" --yes --output-format json
+```
+
+### 5. Reply Composer
+
+**Responsibilities:**
+- Format Claude's output into readable email
+- Include PR link, preview link, summary
+- Attach relevant screenshots if available
+- Send via Resend API
+
+```typescript
+interface EmailReply {
+  to: string;
+  subject: string;  // Re: original subject
+  inReplyTo: string; // Message-ID header for threading
+  text: string;
+  html: string;
+}
+```
+
+## Infrastructure Requirements
+
+### VPS Setup
+
+- **OS:** Ubuntu 22.04+ 
+- **Runtime:** Deno 2.x
+- **Dependencies:** 
+  - Claude Code CLI (authenticated)
+  - GitHub CLI (`gh`) authenticated
+  - Git configured with SSH keys
+- **Storage:** 50GB+ for project repos
+- **Memory:** 4GB+ recommended
+
+### Resend Configuration
+
+1. **Inbound domain:** `code.patch.agency` (or subdomain)
+2. **MX records:** Point to Resend's inbound servers
+3. **Webhook URL:** `https://your-vps.com/webhook/email`
+4. **Webhook signing secret:** For validation
+
+### GitHub Setup
+
+- GitHub App or PAT with repo access
+- Webhook for PR status updates (optional, for deployment URLs)
+
+### Preview Deployments
+
+Options:
+- **Vercel:** Auto-deploys on PR, provides preview URL
+- **Netlify:** Same as Vercel
+- **Coolify:** Self-hosted option on same VPS
+- **Custom:** Simple static file server per branch
+
+## Security Considerations
+
+### Authentication
+
+| Method | Pros | Cons |
+|--------|------|------|
+| Sender allowlist | Simple, effective | Can't add new users easily |
+| DKIM verification | Proves sender domain | Doesn't prove individual |
+| Secret in subject | Works anywhere | Ugly, can leak in forwards |
+| GPG signed emails | Most secure | Complex setup |
+
+**Recommendation:** Start with sender allowlist (your email + Grace's), add webhook signature verification from Resend.
+
+### Rate Limiting
+
+- Max N emails per hour per sender
+- Max concurrent Claude jobs
+- Timeout long-running jobs (30 min default)
+
+### Sandboxing
+
+- Each project in its own directory
+- Consider Docker containers per job (overkill for personal use)
+- Never run arbitrary shell commands from email body
+
+## Pros and Cons
+
+### Pros
+
+| Benefit | Details |
+|---------|---------|
+| **Universal client** | Works from any email app, any device, any OS |
+| **Async by design** | Perfect for "fire and forget" tasks |
+| **Built-in threading** | Email clients handle conversation history |
+| **No VPN needed** | No Tailscale, no port forwarding |
+| **Offline composition** | Write emails on plane, send when connected |
+| **Attachments** | Send images, docs, specs directly |
+| **Audit trail** | Full history in your inbox |
+| **Delegation ready** | Forward to team members, CC stakeholders |
+| **Low friction** | No app to install, no terminal to navigate |
+
+### Cons
+
+| Drawback | Details |
+|----------|---------|
+| **Not real-time** | Can't watch Claude work, no immediate feedback |
+| **Email latency** | 5-30 second delays each direction |
+| **No intervention** | Can't stop Claude mid-task if it's going wrong |
+| **Debugging harder** | Can't inspect terminal output live |
+| **Attachment limits** | Large files may not work |
+| **Spam risk** | Need good filtering to avoid noise |
+| **Context limits** | Long threads may exceed token limits |
+| **Security surface** | Email is inherently less secure than SSH |
+
+### When Email Works Best
+
+✅ Small, well-defined tasks ("Add a contact form to the homepage")  
+✅ Bug fixes with clear reproduction steps  
+✅ Content updates ("Update the pricing to £99/month")  
+✅ Feature requests while traveling  
+✅ Tasks you'd otherwise forget  
+
+### When SSH is Better
+
+❌ Complex debugging sessions  
+❌ Exploratory work ("Let's try a few approaches")  
+❌ Anything requiring back-and-forth iteration  
+❌ Time-sensitive fixes  
+❌ Large refactors needing oversight  
+
+## Email Format Conventions
+
+### Subject Line
+
+```
+{project} - {task description}
+```
+
+Examples:
+- `webapp - Add newsletter signup form`
+- `api - Fix authentication timeout bug`
+- `docs - Update deployment guide`
+
+### Body Structure
+
+```
+{main prompt}
+
+---
+Context: {optional context}
+Branch: {optional specific branch to base off}
+Priority: {optional: high/normal/low}
+```
+
+### Special Commands (in subject)
+
+- `[merge]` - Merge the current PR
+- `[close]` - Close PR without merging
+- `[status]` - Get current status without running Claude
+
+## Response Format
+
+```
+Subject: Re: webapp - Add newsletter signup form
+
+## Summary
+Added a newsletter signup form to the homepage footer with email 
+validation and Resend integration.
+
+## Changes
+- Created `components/NewsletterForm.tsx`
+- Added form to `app/page.tsx`  
+- Added `/api/subscribe` endpoint
+- Updated environment variables
+
+## Links
+- PR: https://github.com/patch/webapp/pull/42
+- Preview: https://webapp-pr-42.vercel.app
+- Branch: `email/abc123`
+
+## Claude's Notes
+The form uses your existing Resend API key from env. I added basic 
+rate limiting but you may want to add CAPTCHA for production.
+
+---
+Reply to this email to continue the conversation.
+Approximate tokens used: 12,450
+```
+
+## File Structure
+
+```
+email-claude/
+├── src/
+│   ├── webhook.ts          # Resend webhook handler
+│   ├── session.ts          # Session management
+│   ├── queue.ts            # Job queue (your existing scripts)
+│   ├── runner.ts           # Claude Code execution
+│   ├── mailer.ts           # Reply composition & sending
+│   └── config.ts           # Environment config
+├── db/
+│   └── sessions.db         # SQLite database
+├── projects/               # Cloned project repos
+│   ├── webapp/
+│   ├── mobile-app/
+│   └── client-site/
+├── logs/
+│   └── jobs/               # Per-job output logs
+├── deno.json
+└── .env
+```
+
+## Implementation Phases
+
+### Phase 1: Basic Flow (MVP)
+- [ ] Resend inbound webhook
+- [ ] Single project support
+- [ ] New sessions only (no resume)
+- [ ] Plain text replies
+- [ ] Manual PR creation
+
+### Phase 2: Sessions & Threading
+- [ ] Subject-based session tracking
+- [ ] `claude --resume` integration
+- [ ] Proper email threading (In-Reply-To headers)
+- [ ] SQLite session storage
+
+### Phase 3: Polish
+- [ ] HTML email replies with syntax highlighting
+- [ ] Preview deployment URL extraction
+- [ ] Attachment handling (images → Claude vision)
+- [ ] Error handling & retry logic
+
+### Phase 4: Nice-to-haves
+- [ ] Web dashboard for monitoring
+- [ ] Slack/Discord notifications
+- [ ] Cost tracking per session
+- [ ] Multiple user support
+
+## Environment Variables
+
+```bash
+# Resend
+RESEND_API_KEY=re_xxxxx
+RESEND_WEBHOOK_SECRET=whsec_xxxxx
+RESEND_FROM_EMAIL=claude@code.patch.agency
+
+# GitHub  
+GITHUB_TOKEN=ghp_xxxxx
+
+# Claude
+ANTHROPIC_API_KEY=sk-ant-xxxxx
+
+# Security
+ALLOWED_SENDERS=chris@patch.agency,grace@patch.agency
+
+# Paths
+PROJECTS_DIR=/home/claude/projects
+SESSIONS_DB=/home/claude/db/sessions.db
+```
+
+## Prior Art & References
+
+- [doom-coding](https://github.com/rberg27/doom-coding) - Original "vibe code from phone" guide
+- [HN Discussion](https://news.ycombinator.com/item?id=46517458) - Where email idea originated
+- [miranda](https://github.com/cloud-atlas-ai/miranda) - Telegram bot approach (similar concept)
+- [Resend Inbound](https://resend.com/docs/dashboard/webhooks/inbound-emails) - Email webhook docs
+
+## Open Questions
+
+1. **Session expiry:** How long to keep sessions active? 24h? 7d? Never?
+2. **Branch cleanup:** Auto-delete branches after merge? Or keep for reference?
+3. **Cost visibility:** Include API costs in reply? Or separate daily summary?
+4. **Failure handling:** Retry failed jobs? Alert via separate channel?
+5. **Multi-repo tasks:** Support tasks spanning multiple projects?
+
+---
+
+*This is a fun project. The HN commenter was right that it won't replace SSH for serious work, but for "I'm on a beach and just thought of a quick fix" scenarios, email hits different.*
+
+---
+
+## Adaptation Notes (from patch-workbench-laravel)
+
+This section documents what was copied from `patch-workbench-laravel/deno-worker/` and what needs to change.
+
+### Copied Files
+
+| Source | Destination | Status |
+|--------|-------------|--------|
+| `deno-worker/services/claude-code.ts` | `src/services/claude-code.ts` | Copied with `autoApprove` option added |
+| `deno-worker/worker.ts` | `src/worker.ts` | Copied with email job structure |
+| `deno-worker/deno.json` | `deno.json` | Adapted with new dependencies |
+
+### ClaudeCodeService Changes
+
+The `ClaudeCodeService` class is nearly identical, with one addition:
+
+```typescript
+// Added option
+autoApprove?: boolean; // Maps to --yes flag
+
+// In buildArgs():
+if (this.options.autoApprove) {
+  args.push("--yes");
+}
+```
+
+**Usage for email automation:**
+```typescript
+const service = new ClaudeCodeService({
+  cwd: `/projects/${projectName}`,
+  sessionId: subjectHash,
+  resumeSession: hasExistingSession,
+  autoApprove: true, // Always auto-approve for email jobs
+});
+```
+
+### Worker Changes
+
+The Redis BLPOP pattern is identical. Key differences:
+
+| Original (Laravel) | Email Version |
+|--------------------|---------------|
+| Fetches job via HTTP to Laravel | Fetches from SQLite |
+| Updates status via HTTP callback | Sends email reply |
+| `chat_id`, `user_id` fields | `replyTo`, `messageId` fields |
+| WebSocket broadcasting | No real-time needed |
+
+### Files Still Needed
+
+These files need to be created (not copied):
+
+- [ ] `src/webhook.ts` - Resend inbound email webhook handler
+- [ ] `src/session.ts` - SQLite session manager
+- [ ] `src/mailer.ts` - Resend email sender
+- [ ] `src/handlers/email-job.ts` - Email job processor
+- [ ] `src/config.ts` - Environment configuration
+
+### Implementation Checklist
+
+**Phase 1 - MVP (adapt existing code):**
+- [x] Copy `ClaudeCodeService` with `--yes` flag
+- [x] Copy Redis BLPOP worker structure
+- [x] Create `deno.json` with dependencies
+- [ ] Create `src/webhook.ts` - HTTP server for Resend webhooks
+- [ ] Create `src/session.ts` - SQLite session CRUD
+- [ ] Create `src/handlers/email-job.ts` - Wire up ClaudeCodeService
+- [ ] Create `src/mailer.ts` - Send replies via Resend API
+
+**Phase 2 - Sessions:**
+- [ ] Implement subject line → session ID hashing
+- [ ] Pass `--resume` flag for existing sessions
+- [ ] Store Claude session ID after first run
+
+**Phase 3 - Polish:**
+- [ ] Parse Claude output for PR URLs
+- [ ] Format nice HTML email templates
+- [ ] Handle attachments (save to disk, pass to Claude)

@@ -1,0 +1,16 @@
+{
+  "$schema": "https://deno.land/x/deno/cli/schemas/config-file.v1.json",
+  "tasks": {
+    "start": "deno run --allow-all --env src/worker.ts",
+    "dev": "deno run --allow-all --env --watch src/worker.ts",
+    "webhook": "deno run --allow-all --env src/webhook.ts"
+  },
+  "imports": {
+    "redis": "npm:redis@4",
+    "resend": "npm:resend@4",
+    "@db/sqlite": "jsr:@db/sqlite@0.12"
+  },
+  "compilerOptions": {
+    "strict": true
+  }
+}
