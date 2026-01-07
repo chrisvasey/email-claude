@@ -56,13 +56,12 @@ export class ClaudeCodeService {
       args.push("--model", this.options.model);
     }
 
-    if (this.options.permissionMode) {
-      args.push("--permission-mode", this.options.permissionMode);
-    }
-
     // Auto-approve all actions (for automated workflows like email)
+    // If autoApprove is true, use bypassPermissions; otherwise use provided permissionMode
     if (this.options.autoApprove) {
-      args.push("--yes");
+      args.push("--permission-mode", "bypassPermissions");
+    } else if (this.options.permissionMode) {
+      args.push("--permission-mode", this.options.permissionMode);
     }
 
     // Add session resumption if sessionId is provided and not a new session
