@@ -168,5 +168,38 @@ export async function hasChanges(projectPath: string): Promise<boolean> {
   return output.length > 0;
 }
 
+/**
+ * Check if current branch has commits ahead of main/master
+ * Returns true if there are commits to push for a PR
+ */
+export async function hasCommitsAhead(projectPath: string): Promise<boolean> {
+  // Get the default branch (usually main or master)
+  let baseBranch = "main";
+  try {
+    await runGit(projectPath, ["rev-parse", "--verify", "main"]);
+  } catch {
+    try {
+      await runGit(projectPath, ["rev-parse", "--verify", "master"]);
+      baseBranch = "master";
+    } catch {
+      // Neither main nor master exist, assume there are commits
+      return true;
+    }
+  }
+
+  // Count commits ahead of base branch
+  const currentBranch = await runGit(projectPath, ["rev-parse", "--abbrev-ref", "HEAD"]);
+  if (currentBranch === baseBranch) {
+    return false;
+  }
+
+  try {
+    const output = await runGit(projectPath, ["rev-list", "--count", `${baseBranch}..HEAD`]);
+    return parseInt(output, 10) > 0;
+  } catch {
+    return false;
+  }
+}
+
 // Export runGit and runGh for testing
 export { runGit, runGh };

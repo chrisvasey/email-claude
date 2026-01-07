@@ -18,6 +18,7 @@ import {
   createPR,
   getPRUrl,
   commentOnPR,
+  hasCommitsAhead,
 } from "../git";
 import {
   sendReply,
@@ -26,7 +27,12 @@ import {
   type EmailJob,
   type ClaudeResult,
 } from "../mailer";
-import { updateSession, type Session } from "../session";
+import {
+  updateSession,
+  addSessionMessage,
+  getSessionMessages,
+  type Session,
+} from "../session";
 import { buildFullPrompt } from "../prompts";
 
 export interface JobContext {
@@ -49,56 +55,74 @@ export async function handleEmailJob(
     // 1. Setup git branch
     await ensureBranch(projectPath, session.branchName);
 
-    // 2. Run Claude Code with prompt (includes system instructions for atomic commits)
+    // 2. Save user's message to conversation history
+    addSessionMessage(ctx.db, session.id, "user", job.prompt);
+
+    // 3. Run Claude Code with prompt (includes system instructions for atomic commits)
     const fullPrompt = buildFullPrompt(job.prompt);
     const result = await runClaude(projectPath, fullPrompt, session);
 
-    // 3. Handle PR creation or commenting
-    if (session.prNumber === null) {
-      // First email: Create PR with original email in body
-      const prBody = [
-        "## Original Request",
-        "",
-        "```",
-        job.prompt,
-        "```",
-        "",
-        `Session: ${session.id}`,
-      ].join("\n");
+    // 4. Save Claude's response to conversation history
+    addSessionMessage(ctx.db, session.id, "assistant", result.summary);
 
-      const prNumber = await createPR(
-        projectPath,
-        `[Email] ${job.originalSubject}`,
-        prBody
-      );
+    // 5. Handle PR creation or commenting (only if there are commits)
+    const hasCommits = await hasCommitsAhead(projectPath);
 
-      // Update session with PR number
-      updateSession(ctx.db, session.id, { prNumber });
-      result.prNumber = prNumber;
-    } else {
-      // Subsequent email: Add comment to existing PR
-      const comment = [
-        "## Follow-up Request",
-        "",
-        "```",
-        job.prompt,
-        "```",
-        "",
-        "## Claude's Response",
-        "",
-        result.summary,
-      ].join("\n");
+    if (hasCommits) {
+      if (session.prNumber === null) {
+        // First PR: Include full conversation history
+        const messages = getSessionMessages(ctx.db, session.id);
+        const conversationHistory = messages
+          .map((msg) => {
+            const label = msg.role === "user" ? "**User:**" : "**Claude:**";
+            return `${label}\n\n${msg.content}`;
+          })
+          .join("\n\n---\n\n");
 
-      await commentOnPR(projectPath, session.prNumber, comment);
-      result.prNumber = session.prNumber;
+        const prBody = [
+          "## Conversation",
+          "",
+          conversationHistory,
+          "",
+          "---",
+          "",
+          `Session: \`${session.id}\``,
+        ].join("\n");
+
+        const prNumber = await createPR(
+          projectPath,
+          `[Email] ${job.originalSubject}`,
+          prBody
+        );
+
+        // Update session with PR number
+        updateSession(ctx.db, session.id, { prNumber });
+        result.prNumber = prNumber;
+      } else {
+        // Subsequent email: Add comment to existing PR
+        const comment = [
+          "## Follow-up Request",
+          "",
+          "```",
+          job.prompt,
+          "```",
+          "",
+          "## Claude's Response",
+          "",
+          result.summary,
+        ].join("\n");
+
+        await commentOnPR(projectPath, session.prNumber, comment);
+        result.prNumber = session.prNumber;
+      }
+
+      // 6. Get PR URL
+      if (result.prNumber !== null && result.prNumber !== undefined) {
+        result.prUrl = await getPRUrl(projectPath, result.prNumber);
+      }
     }
 
-    // 4. Get PR URL
-    if (result.prNumber !== null && result.prNumber !== undefined) {
-      result.prUrl = await getPRUrl(projectPath, result.prNumber);
-    }
-
-    // 5. Send success email reply
+    // 7. Send success email reply
     await sendReply(formatSuccessReply(result, job), ctx.fromEmail);
   } catch (error) {
     // On error: send error email reply

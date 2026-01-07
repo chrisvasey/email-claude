@@ -20,6 +20,14 @@ export interface Session {
   lastActivity: string;
 }
 
+export interface SessionMessage {
+  id: number;
+  sessionId: string;
+  role: "user" | "assistant";
+  content: string;
+  createdAt: string;
+}
+
 export interface InboundEmail {
   from: string;
   to: string;
@@ -73,6 +81,21 @@ export function initDb(dbPath: string): Database {
 
   db.run(`
     CREATE INDEX IF NOT EXISTS idx_subject_hash ON sessions(subject_hash)
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS session_messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      session_id TEXT NOT NULL,
+      role TEXT NOT NULL,
+      content TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (session_id) REFERENCES sessions(id)
+    )
+  `);
+
+  db.run(`
+    CREATE INDEX IF NOT EXISTS idx_session_messages_session_id ON session_messages(session_id)
   `);
 
   return db;
@@ -239,4 +262,42 @@ export function getOrCreateSession(
     createdAt: now,
     lastActivity: now,
   };
+}
+
+/**
+ * Add a message to a session's conversation history
+ */
+export function addSessionMessage(
+  db: Database,
+  sessionId: string,
+  role: "user" | "assistant",
+  content: string
+): void {
+  const now = new Date().toISOString();
+  const stmt = db.prepare(`
+    INSERT INTO session_messages (session_id, role, content, created_at)
+    VALUES (?, ?, ?, ?)
+  `);
+  stmt.run(sessionId, role, content, now);
+}
+
+/**
+ * Get all messages for a session, ordered by creation time
+ */
+export function getSessionMessages(
+  db: Database,
+  sessionId: string
+): SessionMessage[] {
+  const stmt = db.prepare(`
+    SELECT
+      id,
+      session_id as sessionId,
+      role,
+      content,
+      created_at as createdAt
+    FROM session_messages
+    WHERE session_id = ?
+    ORDER BY created_at ASC
+  `);
+  return stmt.all(sessionId) as SessionMessage[];
 }

@@ -54,11 +54,14 @@ mock.module("../services/claude-code", () => ({
   ClaudeCodeService: MockClaudeCodeService,
 }));
 
+let mockHasCommitsAhead: ReturnType<typeof mock>;
+
 mock.module("../git", () => ({
   ensureBranch: (...args: unknown[]) => mockEnsureBranch(...args),
   createPR: (...args: unknown[]) => mockCreatePR(...args),
   getPRUrl: (...args: unknown[]) => mockGetPRUrl(...args),
   commentOnPR: (...args: unknown[]) => mockCommentOnPR(...args),
+  hasCommitsAhead: (...args: unknown[]) => mockHasCommitsAhead(...args),
 }));
 
 mock.module("../prompts", () => ({
@@ -71,8 +74,13 @@ mock.module("../mailer", () => ({
   formatErrorReply: (...args: unknown[]) => mockFormatErrorReply(...args),
 }));
 
+let mockAddSessionMessage: ReturnType<typeof mock>;
+let mockGetSessionMessages: ReturnType<typeof mock>;
+
 mock.module("../session", () => ({
   updateSession: (...args: unknown[]) => mockUpdateSession(...args),
+  addSessionMessage: (...args: unknown[]) => mockAddSessionMessage(...args),
+  getSessionMessages: (...args: unknown[]) => mockGetSessionMessages(...args),
 }));
 
 describe("email-job handler", () => {
@@ -89,6 +97,7 @@ describe("email-job handler", () => {
       Promise.resolve("https://github.com/test/repo/pull/42")
     );
     mockCommentOnPR = mock(() => Promise.resolve());
+    mockHasCommitsAhead = mock(() => Promise.resolve(true));
     mockSendReply = mock(() => Promise.resolve());
     mockFormatSuccessReply = mock(() => ({
       to: "user@example.com",
@@ -101,6 +110,11 @@ describe("email-job handler", () => {
       text: "Error",
     }));
     mockUpdateSession = mock(() => {});
+    mockAddSessionMessage = mock(() => {});
+    mockGetSessionMessages = mock(() => [
+      { id: 1, sessionId: "session-456", role: "user", content: "Add a new feature", createdAt: new Date().toISOString() },
+      { id: 2, sessionId: "session-456", role: "assistant", content: "I completed the task successfully.", createdAt: new Date().toISOString() },
+    ]);
     mockClaudeOnMessage = mock(() => () => {});
     mockClaudeOnComplete = mock(() => () => {});
     mockBuildFullPrompt = mock((prompt: string) => `SYSTEM INSTRUCTIONS\n\n---\n\n${prompt}`);
@@ -176,16 +190,21 @@ describe("email-job handler", () => {
       // Verify prompt was built with system instructions
       expect(mockBuildFullPrompt).toHaveBeenCalledWith("Add a new feature");
 
-      // Verify PR was created with original email in body
+      // Verify PR was created with conversation history
       expect(mockCreatePR).toHaveBeenCalledWith(
         "/projects/my-project",
         "[Email] Add feature request",
-        expect.stringContaining("## Original Request")
+        expect.stringContaining("## Conversation")
       );
       expect(mockCreatePR).toHaveBeenCalledWith(
         "/projects/my-project",
         "[Email] Add feature request",
-        expect.stringContaining("Add a new feature")
+        expect.stringContaining("**User:**")
+      );
+      expect(mockCreatePR).toHaveBeenCalledWith(
+        "/projects/my-project",
+        "[Email] Add feature request",
+        expect.stringContaining("**Claude:**")
       );
 
       // Verify session was updated with PR number
