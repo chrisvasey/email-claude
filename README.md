@@ -75,7 +75,10 @@ email-claude/
 │   ├── session.ts            # SQLite session manager (bun:sqlite)
 │   ├── mailer.ts             # Email reply composer (Resend API)
 │   ├── git.ts                # Git/GitHub CLI utilities
+│   ├── prompts.ts            # Prompt template loader
 │   └── config.ts             # Environment configuration
+├── prompts/
+│   └── system.md             # System instructions for Claude (atomic commits)
 ├── db/
 │   └── sessions.db           # SQLite database (created on first run)
 ├── package.json
@@ -111,16 +114,19 @@ bun test src/config.test.ts
 - [x] Plain text email replies (`src/mailer.ts`)
 - [x] Auto PR creation via `gh` CLI (`src/git.ts`)
 - [x] Email job processing (`src/handlers/email-job.ts`)
-- [x] Full test coverage (105 tests)
+- [x] Full test coverage (106 tests)
 
-### Phase 2: Sessions & Threading
+### Phase 2: Sessions & Threading - Complete
 - [x] Subject-based session tracking (via subject hash)
-- [ ] `claude --resume` integration
 - [x] Proper email threading (In-Reply-To headers)
 - [x] SQLite session storage
+- [x] PR body contains original email text
+- [x] Follow-up emails add comments to existing PR
+- [x] Atomic commits via system instructions (`prompts/system.md`)
 
 ### Phase 3: Polish
-- [ ] HTML email replies with syntax highlighting
+- [ ] `claude --resume` integration (multi-turn conversations)
 - [ ] Preview deployment URL extraction
 - [ ] Attachment handling (images to Claude vision)
 - [ ] Error handling & retry logic
+- [ ] Special commands ([merge], [close], [status])

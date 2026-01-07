@@ -2,9 +2,11 @@
 
 A step-by-step guide to building email-driven Claude Code with **Bun**.
 
+**Status:** Phase 1 & 2 COMPLETE (106 tests passing)
+
 ---
 
-## Phase 1: MVP (End-to-end Flow)
+## Phase 1: MVP (End-to-end Flow) - COMPLETE
 
 **Goal:** Send an email → Claude runs → Receive reply with results.
 
@@ -203,9 +205,15 @@ curl -X POST http://localhost:8080/webhook/email \
 
 ---
 
-## Phase 2: Session Management
+## Phase 2: Session Management - COMPLETE
 
 **Goal:** Reply to an email thread → Claude resumes the session.
+
+**Implemented:**
+- Subject-based session tracking via hash
+- PR body contains original email text
+- Follow-up emails add comments to existing PR
+- Atomic commits via `prompts/system.md` instructions
 
 ### Step 2.1: SQLite Session Storage
 **File:** `src/session.ts`
@@ -299,7 +307,7 @@ curl ... -d '{"subject": "Re: webapp - Add dark mode", "text": "Also persist to 
 
 ---
 
-## Phase 3: Git & PR Integration
+## Phase 3: Git & PR Integration - COMPLETE
 
 **Goal:** Auto-create branches and PRs.
 
@@ -348,39 +356,16 @@ const prUrl = await getPRUrl(projectPath, session.prNumber);
 
 ---
 
-## Phase 4: Polish
+## Phase 4: Polish - TODO
 
-### Step 4.1: HTML Email Templates
-**File:** `src/templates/reply.html`
+### Remaining Items
+- [ ] `claude --resume` integration for multi-turn conversations
+- [ ] Preview deployment URL extraction
+- [ ] Attachment handling (images to Claude vision)
+- [ ] Error handling & retry logic
+- [ ] Special commands ([merge], [close], [status])
 
-```html
-<div style="font-family: system-ui, sans-serif;">
-  <h2>Summary</h2>
-  <p>{{summary}}</p>
-
-  <h2>Changes</h2>
-  <ul>
-    {{#each changes}}
-    <li><code>{{this}}</code></li>
-    {{/each}}
-  </ul>
-
-  <h2>Links</h2>
-  <ul>
-    <li><a href="{{prUrl}}">Pull Request #{{prNumber}}</a></li>
-    {{#if previewUrl}}
-    <li><a href="{{previewUrl}}">Preview</a></li>
-    {{/if}}
-  </ul>
-
-  <hr>
-  <p style="color: #666;">Reply to continue. Tokens used: {{tokens}}</p>
-</div>
-```
-
----
-
-### Step 4.2: Error Handling & Retries
+### Step 4.1: Error Handling & Retries
 **File:** `src/handlers/email-job.ts`
 
 ```typescript

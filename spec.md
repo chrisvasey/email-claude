@@ -346,24 +346,27 @@ email-claude/
 
 ## Implementation Phases
 
-### Phase 1: Basic Flow (MVP)
-- [ ] Resend inbound webhook
-- [ ] Single project support
-- [ ] New sessions only (no resume)
-- [ ] Plain text replies
-- [ ] Manual PR creation
+### Phase 1: Basic Flow (MVP) - COMPLETE
+- [x] Resend inbound webhook
+- [x] Single project support
+- [x] Session tracking with SQLite
+- [x] Plain text replies
+- [x] Auto PR creation via `gh` CLI
 
-### Phase 2: Sessions & Threading
-- [ ] Subject-based session tracking
-- [ ] `claude --resume` integration
-- [ ] Proper email threading (In-Reply-To headers)
-- [ ] SQLite session storage
+### Phase 2: Sessions & Threading - COMPLETE
+- [x] Subject-based session tracking (via subject hash)
+- [x] Proper email threading (In-Reply-To headers)
+- [x] SQLite session storage
+- [x] PR body contains original email text
+- [x] Follow-up emails add PR comments
+- [x] Atomic commits via system instructions
 
 ### Phase 3: Polish
-- [ ] HTML email replies with syntax highlighting
+- [ ] `claude --resume` integration
 - [ ] Preview deployment URL extraction
 - [ ] Attachment handling (images → Claude vision)
 - [ ] Error handling & retry logic
+- [ ] Special commands ([merge], [close], [status])
 
 ### Phase 4: Nice-to-haves
 - [ ] Web dashboard for monitoring
@@ -471,31 +474,39 @@ The Redis BLPOP pattern is identical. Key differences:
 | `chat_id`, `user_id` fields | `replyTo`, `messageId` fields |
 | WebSocket broadcasting | No real-time needed |
 
-### Files Still Needed
+### Files Completed
 
-- [ ] `src/webhook.ts` - Resend inbound webhook (`Bun.serve`)
-- [ ] `src/session.ts` - SQLite session manager (`bun:sqlite`)
-- [ ] `src/mailer.ts` - Resend email sender
-- [ ] `src/handlers/email-job.ts` - Email job processor
-- [ ] `src/config.ts` - Environment configuration
+- [x] `src/webhook.ts` - Resend inbound webhook (`Bun.serve`)
+- [x] `src/session.ts` - SQLite session manager (`bun:sqlite`)
+- [x] `src/mailer.ts` - Resend email sender
+- [x] `src/handlers/email-job.ts` - Email job processor
+- [x] `src/config.ts` - Environment configuration
+- [x] `src/git.ts` - Git/GitHub CLI utilities
+- [x] `src/prompts.ts` - Prompt template loader
+- [x] `prompts/system.md` - System instructions for atomic commits
 
 ### Implementation Checklist
 
-**Phase 1 - MVP:**
+**Phase 1 - MVP:** COMPLETE
 - [x] Port `ClaudeCodeService` to Bun APIs
 - [x] Port Redis BLPOP worker to Bun
 - [x] Create `package.json` with dependencies
-- [ ] Create `src/webhook.ts` - HTTP server for Resend webhooks
-- [ ] Create `src/session.ts` - SQLite session CRUD
-- [ ] Create `src/handlers/email-job.ts` - Wire up ClaudeCodeService
-- [ ] Create `src/mailer.ts` - Send replies via Resend API
+- [x] Create `src/webhook.ts` - HTTP server for Resend webhooks
+- [x] Create `src/session.ts` - SQLite session CRUD
+- [x] Create `src/handlers/email-job.ts` - Wire up ClaudeCodeService
+- [x] Create `src/mailer.ts` - Send replies via Resend API
+- [x] Create `src/git.ts` - Git/GitHub CLI utilities
+- [x] Create `src/config.ts` - Environment configuration
 
-**Phase 2 - Sessions:**
-- [ ] Implement subject line → session ID hashing
-- [ ] Pass `--resume` flag for existing sessions
-- [ ] Store Claude session ID after first run
+**Phase 2 - Sessions:** COMPLETE
+- [x] Implement subject line → session ID hashing
+- [x] PR body contains original email text
+- [x] Follow-up emails add comments to existing PR
+- [x] Atomic commits via `prompts/system.md` instructions
 
 **Phase 3 - Polish:**
-- [ ] Parse Claude output for PR URLs
-- [ ] Format nice HTML email templates
+- [ ] Pass `--resume` flag for multi-turn conversations
+- [ ] Store Claude session ID after first run
+- [ ] Parse Claude output for preview URLs
 - [ ] Handle attachments (save to disk, pass to Claude)
+- [ ] Special commands ([merge], [close], [status])
