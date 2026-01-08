@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { loadConfig, validateConfig, getConfig, type Config } from "./config";
+import { loadConfig, validateConfig, getConfig, type Config } from "../src/config";
 
 describe("config", () => {
   // Store original env vars to restore after tests

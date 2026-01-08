@@ -52,7 +52,7 @@ describe("git module", () => {
       });
 
       // Import after mocking
-      const { ensureBranch } = await import("./git.ts");
+      const { ensureBranch } = await import("../src/git.ts");
       await ensureBranch("/test/project", "feature-branch");
 
       expect(spawnCalls.length).toBe(2);
@@ -73,7 +73,7 @@ describe("git module", () => {
         return createMockProc("");
       });
 
-      const { ensureBranch } = await import("./git.ts");
+      const { ensureBranch } = await import("../src/git.ts");
       await ensureBranch("/test/project", "new-branch");
 
       expect(spawnCalls.length).toBe(2);
@@ -95,7 +95,7 @@ describe("git module", () => {
         return createMockProc("");
       });
 
-      const { commitAndPush } = await import("./git.ts");
+      const { commitAndPush } = await import("../src/git.ts");
       await commitAndPush("/test/project", "Test commit message");
 
       expect(spawnCalls.length).toBe(4);
@@ -120,7 +120,7 @@ describe("git module", () => {
         return createMockProc("https://github.com/owner/repo/pull/42");
       });
 
-      const { createPR } = await import("./git.ts");
+      const { createPR } = await import("../src/git.ts");
       const prNumber = await createPR("/test/project", "PR Title", "PR Body");
 
       expect(prNumber).toBe(42);
@@ -143,7 +143,7 @@ describe("git module", () => {
         return createMockProc("42");
       });
 
-      const { createPR } = await import("./git.ts");
+      const { createPR } = await import("../src/git.ts");
       const prNumber = await createPR("/test/project", "PR Title", "PR Body");
 
       expect(prNumber).toBe(42);
@@ -169,7 +169,7 @@ describe("git module", () => {
         return createMockProc("Invalid output");
       });
 
-      const { createPR } = await import("./git.ts");
+      const { createPR } = await import("../src/git.ts");
       await expect(createPR("/test/project", "Title", "Body"))
         .rejects.toThrow("Failed to parse PR number");
     });
@@ -182,7 +182,7 @@ describe("git module", () => {
         return createMockProc("https://github.com/owner/repo/pull/123");
       });
 
-      const { getPRUrl } = await import("./git.ts");
+      const { getPRUrl } = await import("../src/git.ts");
       const url = await getPRUrl("/test/project", 123);
 
       expect(url).toBe("https://github.com/owner/repo/pull/123");
@@ -201,7 +201,7 @@ describe("git module", () => {
         return createMockProc("");
       });
 
-      const { mergePR } = await import("./git.ts");
+      const { mergePR } = await import("../src/git.ts");
       await mergePR("/test/project", 99);
 
       expect(spawnCalls[0].cmd).toEqual(["gh", "pr", "merge", "99", "--merge"]);
@@ -215,7 +215,7 @@ describe("git module", () => {
         return createMockProc("");
       });
 
-      const { closePR } = await import("./git.ts");
+      const { closePR } = await import("../src/git.ts");
       await closePR("/test/project", 77);
 
       expect(spawnCalls[0].cmd).toEqual(["gh", "pr", "close", "77"]);
@@ -229,7 +229,7 @@ describe("git module", () => {
         return createMockProc("");
       });
 
-      const { commentOnPR } = await import("./git.ts");
+      const { commentOnPR } = await import("../src/git.ts");
       await commentOnPR("/test/project", 42, "This is a test comment");
 
       expect(spawnCalls[0].cmd).toEqual([
@@ -246,7 +246,7 @@ describe("git module", () => {
         return createMockProc(" M src/file.ts\n?? new-file.ts");
       });
 
-      const { hasChanges } = await import("./git.ts");
+      const { hasChanges } = await import("../src/git.ts");
       const result = await hasChanges("/test/project");
 
       expect(result).toBe(true);
@@ -259,7 +259,7 @@ describe("git module", () => {
         return createMockProc("");
       });
 
-      const { hasChanges } = await import("./git.ts");
+      const { hasChanges } = await import("../src/git.ts");
       const result = await hasChanges("/test/project");
 
       expect(result).toBe(false);
@@ -273,7 +273,7 @@ describe("git module", () => {
         return createMockProc("", 128, "fatal: not a git repository");
       });
 
-      const { runGit } = await import("./git.ts");
+      const { runGit } = await import("../src/git.ts");
       await expect(runGit("/test/project", ["status"]))
         .rejects.toThrow("git status failed: fatal: not a git repository");
     });
@@ -286,7 +286,7 @@ describe("git module", () => {
         return createMockProc("", 1, "error: not authenticated");
       });
 
-      const { runGh } = await import("./git.ts");
+      const { runGh } = await import("../src/git.ts");
       await expect(runGh("/test/project", ["pr", "list"]))
         .rejects.toThrow("gh pr failed: error: not authenticated");
     });

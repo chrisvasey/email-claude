@@ -5,7 +5,7 @@
  */
 
 import { describe, test, expect, mock, beforeEach, afterEach } from "bun:test";
-import { getRepoUrl, repoExists, ensureRepo } from "./repo";
+// Note: We import dynamically inside tests to ensure mocks are set up first
 
 describe("repo service", () => {
   // Store original Bun.spawn and Bun.file
@@ -39,13 +39,15 @@ describe("repo service", () => {
   });
 
   describe("getRepoUrl", () => {
-    test("builds SSH URL from project and owner", () => {
+    test("builds SSH URL from project and owner", async () => {
+      const { getRepoUrl } = await import("../../src/services/repo");
       expect(getRepoUrl("email-claude", "chrisvasey")).toBe(
         "git@github.com:chrisvasey/email-claude.git"
       );
     });
 
-    test("handles project names with hyphens", () => {
+    test("handles project names with hyphens", async () => {
+      const { getRepoUrl } = await import("../../src/services/repo");
       expect(getRepoUrl("my-cool-project", "someorg")).toBe(
         "git@github.com:someorg/my-cool-project.git"
       );
@@ -60,6 +62,7 @@ describe("repo service", () => {
       // @ts-expect-error - we're mocking Bun.file
       Bun.file = fileMock;
 
+      const { repoExists } = await import("../../src/services/repo");
       const result = await repoExists("/projects/my-repo");
 
       expect(result).toBe(true);
@@ -73,6 +76,7 @@ describe("repo service", () => {
       // @ts-expect-error - we're mocking Bun.file
       Bun.file = fileMock;
 
+      const { repoExists } = await import("../../src/services/repo");
       const result = await repoExists("/projects/missing-repo");
 
       expect(result).toBe(false);
@@ -89,6 +93,7 @@ describe("repo service", () => {
       // @ts-expect-error - we're mocking Bun.spawn
       Bun.spawn = spawnMock;
 
+      const { ensureRepo } = await import("../../src/services/repo");
       const path = await ensureRepo("existing-repo", "/projects", "owner");
 
       expect(path).toBe("/projects/existing-repo");
@@ -105,6 +110,7 @@ describe("repo service", () => {
       // @ts-expect-error - we're mocking Bun.spawn
       Bun.spawn = spawnMock;
 
+      const { ensureRepo } = await import("../../src/services/repo");
       const path = await ensureRepo("new-repo", "/projects", "chrisvasey");
 
       expect(path).toBe("/projects/new-repo");
@@ -125,6 +131,7 @@ describe("repo service", () => {
       // @ts-expect-error - we're mocking Bun.spawn
       Bun.spawn = spawnMock;
 
+      const { ensureRepo } = await import("../../src/services/repo");
       await expect(ensureRepo("some-repo", "/projects", ""))
         .rejects.toThrow("GITHUB_OWNER is not configured");
     });
@@ -142,6 +149,7 @@ describe("repo service", () => {
       // @ts-expect-error - we're mocking Bun.spawn
       Bun.spawn = failingSpawnMock;
 
+      const { ensureRepo } = await import("../../src/services/repo");
       await expect(ensureRepo("nonexistent", "/projects", "owner"))
         .rejects.toThrow("Failed to clone");
     });

@@ -15,7 +15,7 @@ import {
   getOrCreateSession,
   type Session,
   type InboundEmail,
-} from "./session.ts";
+} from "../src/session.ts";
 
 describe("session module", () => {
   describe("hashSubject", () => {

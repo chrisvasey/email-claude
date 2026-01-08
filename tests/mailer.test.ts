@@ -5,7 +5,7 @@
  */
 
 import { describe, test, expect, mock, beforeEach, afterEach } from "bun:test";
-import type { EmailJob, ClaudeResult } from "./mailer.ts";
+import type { EmailJob, ClaudeResult } from "../src/mailer.ts";
 
 // Mock Resend before importing mailer
 const mockSend = mock(() => Promise.resolve({ id: "mock-email-id" }));
@@ -59,7 +59,7 @@ describe("mailer module", () => {
 
   describe("formatSuccessReply", () => {
     test("generates correct text format", async () => {
-      const { formatSuccessReply, _resetResendClient } = await import("./mailer.ts");
+      const { formatSuccessReply, _resetResendClient } = await import("../src/mailer.ts");
       _resetResendClient();
 
       const job = createMockJob();
@@ -83,7 +83,7 @@ describe("mailer module", () => {
     });
 
     test("handles missing PR URL", async () => {
-      const { formatSuccessReply, _resetResendClient } = await import("./mailer.ts");
+      const { formatSuccessReply, _resetResendClient } = await import("../src/mailer.ts");
       _resetResendClient();
 
       const job = createMockJob();
@@ -97,7 +97,7 @@ describe("mailer module", () => {
     });
 
     test("handles empty filesChanged array", async () => {
-      const { formatSuccessReply, _resetResendClient } = await import("./mailer.ts");
+      const { formatSuccessReply, _resetResendClient } = await import("../src/mailer.ts");
       _resetResendClient();
 
       const job = createMockJob();
@@ -111,7 +111,7 @@ describe("mailer module", () => {
 
   describe("formatErrorReply", () => {
     test("includes error message", async () => {
-      const { formatErrorReply, _resetResendClient } = await import("./mailer.ts");
+      const { formatErrorReply, _resetResendClient } = await import("../src/mailer.ts");
       _resetResendClient();
 
       const job = createMockJob();
@@ -131,7 +131,7 @@ describe("mailer module", () => {
 
   describe("sendReply", () => {
     test("calls Resend with correct params", async () => {
-      const { sendReply, _resetResendClient } = await import("./mailer.ts");
+      const { sendReply, _resetResendClient } = await import("../src/mailer.ts");
       _resetResendClient();
 
       const reply = {
@@ -154,7 +154,7 @@ describe("mailer module", () => {
     });
 
     test("sets In-Reply-To header when inReplyTo provided", async () => {
-      const { sendReply, _resetResendClient } = await import("./mailer.ts");
+      const { sendReply, _resetResendClient } = await import("../src/mailer.ts");
       _resetResendClient();
 
       const reply = {
@@ -181,7 +181,7 @@ describe("mailer module", () => {
     });
 
     test("includes html when provided", async () => {
-      const { sendReply, _resetResendClient } = await import("./mailer.ts");
+      const { sendReply, _resetResendClient } = await import("../src/mailer.ts");
       _resetResendClient();
 
       const reply = {
@@ -205,7 +205,7 @@ describe("mailer module", () => {
     test("throws when RESEND_API_KEY is not set", async () => {
       delete process.env.RESEND_API_KEY;
 
-      const { getResend, _resetResendClient } = await import("./mailer.ts");
+      const { getResend, _resetResendClient } = await import("../src/mailer.ts");
       _resetResendClient();
 
       expect(() => getResend()).toThrow(
@@ -216,7 +216,7 @@ describe("mailer module", () => {
     test("returns Resend client when API key is set", async () => {
       process.env.RESEND_API_KEY = "re_test_key";
 
-      const { getResend, _resetResendClient } = await import("./mailer.ts");
+      const { getResend, _resetResendClient } = await import("../src/mailer.ts");
       _resetResendClient();
 
       const client = getResend();
@@ -227,7 +227,7 @@ describe("mailer module", () => {
     test("reuses client on subsequent calls", async () => {
       process.env.RESEND_API_KEY = "re_test_key";
 
-      const { getResend, _resetResendClient } = await import("./mailer.ts");
+      const { getResend, _resetResendClient } = await import("../src/mailer.ts");
       _resetResendClient();
 
       const client1 = getResend();

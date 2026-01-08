@@ -23,8 +23,8 @@ import {
   handleEmailWebhook,
   createServer,
   type ResendInboundPayload,
-} from "./webhook";
-import type { Config } from "./config";
+} from "../src/webhook";
+import type { Config } from "../src/config";
 
 describe("webhook module", () => {
   describe("verifySignature", () => {

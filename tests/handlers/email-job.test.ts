@@ -9,10 +9,10 @@ import {
   extractSummary,
   extractFilesChanged,
   type JobContext,
-} from "./email-job";
-import type { EmailJob, ClaudeResult } from "../mailer";
-import type { Session } from "../session";
-import type { ClaudeCodeMessage } from "../services/claude-code";
+} from "../../src/handlers/email-job";
+import type { EmailJob, ClaudeResult } from "../../src/mailer";
+import type { Session } from "../../src/session";
+import type { ClaudeCodeMessage } from "../../src/services/claude-code";
 
 // Mock modules
 let mockEnsureBranch: ReturnType<typeof mock>;
@@ -50,13 +50,13 @@ const MockClaudeCodeService = mock((options: unknown) => {
 });
 
 // Import the module to be tested (will be replaced with mocked version)
-mock.module("../services/claude-code", () => ({
+mock.module("../../src/services/claude-code", () => ({
   ClaudeCodeService: MockClaudeCodeService,
 }));
 
 let mockHasCommitsAhead: ReturnType<typeof mock>;
 
-mock.module("../git", () => ({
+mock.module("../../src/git", () => ({
   ensureBranch: (...args: unknown[]) => mockEnsureBranch(...args),
   createPR: (...args: unknown[]) => mockCreatePR(...args),
   getPRUrl: (...args: unknown[]) => mockGetPRUrl(...args),
@@ -64,11 +64,11 @@ mock.module("../git", () => ({
   hasCommitsAhead: (...args: unknown[]) => mockHasCommitsAhead(...args),
 }));
 
-mock.module("../prompts", () => ({
+mock.module("../../src/prompts", () => ({
   buildFullPrompt: (...args: unknown[]) => mockBuildFullPrompt(...args),
 }));
 
-mock.module("../mailer", () => ({
+mock.module("../../src/mailer", () => ({
   sendReply: (...args: unknown[]) => mockSendReply(...args),
   formatSuccessReply: (...args: unknown[]) => mockFormatSuccessReply(...args),
   formatErrorReply: (...args: unknown[]) => mockFormatErrorReply(...args),
@@ -77,14 +77,14 @@ mock.module("../mailer", () => ({
 let mockAddSessionMessage: ReturnType<typeof mock>;
 let mockGetSessionMessages: ReturnType<typeof mock>;
 
-mock.module("../session", () => ({
+mock.module("../../src/session", () => ({
   updateSession: (...args: unknown[]) => mockUpdateSession(...args),
   addSessionMessage: (...args: unknown[]) => mockAddSessionMessage(...args),
   getSessionMessages: (...args: unknown[]) => mockGetSessionMessages(...args),
 }));
 
 // Mock ensureRepo to always succeed (repo exists)
-mock.module("../services/repo", () => ({
+mock.module("../../src/services/repo", () => ({
   ensureRepo: (project: string, projectsDir: string) => {
     return Promise.resolve(`${projectsDir}/${project}`);
   },
