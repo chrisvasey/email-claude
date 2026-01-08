@@ -19,8 +19,13 @@ export function loadPrompt(name: string): string {
 
 /**
  * Build the full prompt by prepending system instructions
+ * @param subject - Email subject line (provides context/instructions)
+ * @param body - Email body content (may be empty if subject contains full instructions)
  */
-export function buildFullPrompt(userPrompt: string): string {
+export function buildFullPrompt(subject: string, body: string): string {
   const system = loadPrompt("system");
-  return `${system}\n\n---\n\n${userPrompt}`;
+  const userContent = body.trim()
+    ? `Subject: ${subject}\n\n${body}`
+    : subject; // If no body, just use subject directly
+  return `${system}\n\n---\n\n${userContent}`;
 }

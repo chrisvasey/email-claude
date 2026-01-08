@@ -149,7 +149,10 @@ describe("email-job handler", () => {
     ]);
     mockClaudeOnMessage = mock(() => () => {});
     mockClaudeOnComplete = mock(() => () => {});
-    mockBuildFullPrompt = mock((prompt: string) => `SYSTEM INSTRUCTIONS\n\n---\n\n${prompt}`);
+    mockBuildFullPrompt = mock((subject: string, body: string) => {
+      const userContent = body.trim() ? `Subject: ${subject}\n\n${body}` : subject;
+      return `SYSTEM INSTRUCTIONS\n\n---\n\n${userContent}`;
+    });
 
     // Reset callbacks
     messageCallback = null;
@@ -220,8 +223,8 @@ describe("email-job handler", () => {
         "email-claude-12345678"
       );
 
-      // Verify prompt was built with system instructions
-      expect(mockBuildFullPrompt).toHaveBeenCalledWith("Add a new feature");
+      // Verify prompt was built with subject and body
+      expect(mockBuildFullPrompt).toHaveBeenCalledWith("Add feature request", "Add a new feature");
 
       // Verify PR was created with conversation history
       expect(mockCreatePR).toHaveBeenCalledWith(
@@ -262,11 +265,16 @@ describe("email-job handler", () => {
       // Verify new PR was NOT created
       expect(mockCreatePR).not.toHaveBeenCalled();
 
-      // Verify comment was added to existing PR
+      // Verify comment was added to existing PR with subject and body
       expect(mockCommentOnPR).toHaveBeenCalledWith(
         "/projects/my-project",
         99,
         expect.stringContaining("## Follow-up Request")
+      );
+      expect(mockCommentOnPR).toHaveBeenCalledWith(
+        "/projects/my-project",
+        99,
+        expect.stringContaining("Subject: Add feature request")
       );
       expect(mockCommentOnPR).toHaveBeenCalledWith(
         "/projects/my-project",

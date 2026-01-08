@@ -60,11 +60,14 @@ export async function handleEmailJob(
     // 2. Setup git branch
     await ensureBranch(projectPath, session.branchName);
 
-    // 3. Save user's message to conversation history
-    addSessionMessage(ctx.db, session.id, "user", job.prompt);
+    // 3. Save user's message to conversation history (include subject for context)
+    const userMessage = job.prompt.trim()
+      ? `Subject: ${job.originalSubject}\n\n${job.prompt}`
+      : job.originalSubject;
+    addSessionMessage(ctx.db, session.id, "user", userMessage);
 
     // 4. Run Claude Code with prompt (includes system instructions for atomic commits)
-    const fullPrompt = buildFullPrompt(job.prompt);
+    const fullPrompt = buildFullPrompt(job.originalSubject, job.prompt);
     const result = await runClaude(projectPath, fullPrompt, session);
 
     // 5. Save Claude's response to conversation history
@@ -105,11 +108,14 @@ export async function handleEmailJob(
         result.prNumber = prNumber;
       } else {
         // Subsequent email: Add comment to existing PR
+        const requestContent = job.prompt.trim()
+          ? `Subject: ${job.originalSubject}\n\n${job.prompt}`
+          : job.originalSubject;
         const comment = [
           "## Follow-up Request",
           "",
           "```",
-          job.prompt,
+          requestContent,
           "```",
           "",
           "## Claude's Response",
