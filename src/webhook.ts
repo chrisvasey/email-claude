@@ -19,13 +19,18 @@ import type { Database } from "bun:sqlite";
 // Resend webhook payload interface
 export interface ResendInboundPayload {
   type: "email.received";
+  created_at: string;
   data: {
+    email_id: string;
     from: string;
     to: string[];
+    cc?: string[];
+    bcc?: string[];
     subject: string;
-    text: string;
+    text?: string;
     html?: string;
-    headers: Array<{ name: string; value: string }>;
+    message_id: string;
+    created_at: string;
     attachments?: Array<{ filename: string; content: string }>;
   };
 }
@@ -143,18 +148,6 @@ export function isAllowedSender(
 }
 
 /**
- * Get Message-ID from headers array
- */
-export function getMessageId(
-  headers: Array<{ name: string; value: string }>
-): string {
-  const messageIdHeader = headers.find(
-    (h) => h.name.toLowerCase() === "message-id"
-  );
-  return messageIdHeader?.value || "";
-}
-
-/**
  * Generate a unique job ID
  */
 function generateJobId(): string {
@@ -269,18 +262,47 @@ export async function handleEmailWebhook(
   const project = extractProject(toAddress);
   console.log(`[Webhook] Project: ${project}`);
 
+  // Fetch full email content from Resend API (webhook only contains metadata)
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
+    console.error("[Webhook] RESEND_API_KEY not set");
+    return new Response(JSON.stringify({ error: "Server configuration error" }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  const emailResponse = await fetch(`https://api.resend.com/emails/receiving/${payload.data.email_id}`, {
+    headers: {
+      "Authorization": `Bearer ${apiKey}`,
+    },
+  });
+
+  if (!emailResponse.ok) {
+    console.error(`[Webhook] Failed to fetch email content: ${emailResponse.status} ${emailResponse.statusText}`);
+    return new Response(JSON.stringify({ error: "Failed to fetch email content" }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  const emailContent = await emailResponse.json() as { text?: string; html?: string };
+
   // Ensure database is initialized
   if (!db) {
     db = initDb(cfg.paths.sessionsDb);
   }
+
+  // Get email body text (fallback to html if text is not available)
+  const emailText = emailContent.text || emailContent.html || "";
 
   // Create inbound email for session lookup
   const inboundEmail: InboundEmail = {
     from: payload.data.from,
     to: toAddress,
     subject: payload.data.subject,
-    text: payload.data.text,
-    messageId: getMessageId(payload.data.headers),
+    text: emailText,
+    messageId: payload.data.message_id || "",
   };
 
   // Get or create session
@@ -299,10 +321,10 @@ export async function handleEmailWebhook(
     id: jobId,
     sessionId: session.id,
     project,
-    prompt: payload.data.text,
+    prompt: emailText,
     replyTo: payload.data.from,
     originalSubject: payload.data.subject,
-    messageId: getMessageId(payload.data.headers),
+    messageId: payload.data.message_id || "",
     resumeSession,
     attachments: payload.data.attachments?.map((a) => a.filename),
     createdAt: new Date().toISOString(),

@@ -2,41 +2,23 @@
  * Repository Service Tests
  *
  * Tests for auto-cloning repositories
+ *
+ * Note: We use dynamic imports to avoid Bun's module caching issue
+ * where modules imported by other test files get cached before tests run.
  */
 
-import { describe, test, expect, mock, beforeEach, afterEach } from "bun:test";
-// Note: We import dynamically inside tests to ensure mocks are set up first
+import { describe, test, expect, mock } from "bun:test";
+import type { RepoOptions } from "../../src/services/repo";
 
 describe("repo service", () => {
-  // Store original Bun.spawn and Bun.file
-  const originalSpawn = Bun.spawn;
-  const originalFile = Bun.file;
-  let spawnMock: ReturnType<typeof mock>;
-  let fileMock: ReturnType<typeof mock>;
-  let spawnCalls: Array<{ cmd: string[] }>;
-
   // Helper to create a mock subprocess
-  function createMockProc(stdout: string, exitCode: number = 0, stderr: string = "") {
+  function createMockProc(exitCode: number = 0, stderr: string = "") {
     return {
       exited: Promise.resolve(exitCode),
-      stdout: new Response(stdout).body,
+      stdout: new Response("").body,
       stderr: new Response(stderr).body,
     };
   }
-
-  beforeEach(() => {
-    spawnCalls = [];
-    spawnMock = mock((cmd: string[]) => {
-      spawnCalls.push({ cmd });
-      return createMockProc("");
-    });
-  });
-
-  afterEach(() => {
-    // Restore originals
-    Bun.spawn = originalSpawn;
-    Bun.file = originalFile;
-  });
 
   describe("getRepoUrl", () => {
     test("builds SSH URL from project and owner", async () => {
@@ -56,62 +38,61 @@ describe("repo service", () => {
 
   describe("repoExists", () => {
     test("returns true when .git/config exists", async () => {
-      fileMock = mock(() => ({
-        exists: () => Promise.resolve(true),
-      }));
-      // @ts-expect-error - we're mocking Bun.file
-      Bun.file = fileMock;
-
       const { repoExists } = await import("../../src/services/repo");
-      const result = await repoExists("/projects/my-repo");
+      const mockFileExists = mock(() => Promise.resolve(true));
+
+      const result = await repoExists("/projects/my-repo", {
+        fileExists: mockFileExists,
+      });
 
       expect(result).toBe(true);
-      expect(fileMock).toHaveBeenCalledWith("/projects/my-repo/.git/config");
+      expect(mockFileExists).toHaveBeenCalledWith("/projects/my-repo/.git/config");
     });
 
     test("returns false when .git/config does not exist", async () => {
-      fileMock = mock(() => ({
-        exists: () => Promise.resolve(false),
-      }));
-      // @ts-expect-error - we're mocking Bun.file
-      Bun.file = fileMock;
-
       const { repoExists } = await import("../../src/services/repo");
-      const result = await repoExists("/projects/missing-repo");
+      const mockFileExists = mock(() => Promise.resolve(false));
+
+      const result = await repoExists("/projects/missing-repo", {
+        fileExists: mockFileExists,
+      });
 
       expect(result).toBe(false);
+      expect(mockFileExists).toHaveBeenCalledWith("/projects/missing-repo/.git/config");
     });
   });
 
   describe("ensureRepo", () => {
     test("skips clone when repo already exists", async () => {
-      fileMock = mock(() => ({
-        exists: () => Promise.resolve(true),
-      }));
-      // @ts-expect-error - we're mocking Bun.file
-      Bun.file = fileMock;
-      // @ts-expect-error - we're mocking Bun.spawn
-      Bun.spawn = spawnMock;
-
       const { ensureRepo } = await import("../../src/services/repo");
-      const path = await ensureRepo("existing-repo", "/projects", "owner");
+      const mockFileExists = mock(() => Promise.resolve(true));
+      const mockSpawn = mock(() => createMockProc());
+      const opts: RepoOptions = {
+        fileExists: mockFileExists,
+        spawn: mockSpawn as unknown as typeof Bun.spawn,
+      };
+
+      const path = await ensureRepo("existing-repo", "/projects", "owner", opts);
 
       expect(path).toBe("/projects/existing-repo");
       // Should not have called git clone
-      expect(spawnCalls.length).toBe(0);
+      expect(mockSpawn).not.toHaveBeenCalled();
     });
 
     test("clones repo when it does not exist", async () => {
-      fileMock = mock(() => ({
-        exists: () => Promise.resolve(false),
-      }));
-      // @ts-expect-error - we're mocking Bun.file
-      Bun.file = fileMock;
-      // @ts-expect-error - we're mocking Bun.spawn
-      Bun.spawn = spawnMock;
-
       const { ensureRepo } = await import("../../src/services/repo");
-      const path = await ensureRepo("new-repo", "/projects", "chrisvasey");
+      const mockFileExists = mock(() => Promise.resolve(false));
+      const spawnCalls: Array<{ cmd: string[] }> = [];
+      const mockSpawn = mock((cmd: string[]) => {
+        spawnCalls.push({ cmd });
+        return createMockProc();
+      });
+      const opts: RepoOptions = {
+        fileExists: mockFileExists,
+        spawn: mockSpawn as unknown as typeof Bun.spawn,
+      };
+
+      const path = await ensureRepo("new-repo", "/projects", "chrisvasey", opts);
 
       expect(path).toBe("/projects/new-repo");
       expect(spawnCalls.length).toBe(1);
@@ -123,34 +104,28 @@ describe("repo service", () => {
     });
 
     test("throws when GITHUB_OWNER is empty", async () => {
-      fileMock = mock(() => ({
-        exists: () => Promise.resolve(false),
-      }));
-      // @ts-expect-error - we're mocking Bun.file
-      Bun.file = fileMock;
-      // @ts-expect-error - we're mocking Bun.spawn
-      Bun.spawn = spawnMock;
-
       const { ensureRepo } = await import("../../src/services/repo");
-      await expect(ensureRepo("some-repo", "/projects", ""))
+      const mockFileExists = mock(() => Promise.resolve(false));
+      const mockSpawn = mock(() => createMockProc());
+      const opts: RepoOptions = {
+        fileExists: mockFileExists,
+        spawn: mockSpawn as unknown as typeof Bun.spawn,
+      };
+
+      await expect(ensureRepo("some-repo", "/projects", "", opts))
         .rejects.toThrow("GITHUB_OWNER is not configured");
     });
 
     test("throws when git clone fails", async () => {
-      fileMock = mock(() => ({
-        exists: () => Promise.resolve(false),
-      }));
-      // @ts-expect-error - we're mocking Bun.file
-      Bun.file = fileMock;
-
-      const failingSpawnMock = mock(() => {
-        return createMockProc("", 128, "Repository not found");
-      });
-      // @ts-expect-error - we're mocking Bun.spawn
-      Bun.spawn = failingSpawnMock;
-
       const { ensureRepo } = await import("../../src/services/repo");
-      await expect(ensureRepo("nonexistent", "/projects", "owner"))
+      const mockFileExists = mock(() => Promise.resolve(false));
+      const mockSpawn = mock(() => createMockProc(128, "Repository not found"));
+      const opts: RepoOptions = {
+        fileExists: mockFileExists,
+        spawn: mockSpawn as unknown as typeof Bun.spawn,
+      };
+
+      await expect(ensureRepo("nonexistent", "/projects", "owner", opts))
         .rejects.toThrow("Failed to clone");
     });
   });

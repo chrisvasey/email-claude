@@ -84,12 +84,35 @@ mock.module("../../src/session", () => ({
 }));
 
 // Mock ensureRepo to always succeed (repo exists)
+// Note: We forward opts to allow repo.test.ts to use dependency injection
 mock.module("../../src/services/repo", () => ({
-  ensureRepo: (project: string, projectsDir: string) => {
-    return Promise.resolve(`${projectsDir}/${project}`);
+  ensureRepo: async (project: string, projectsDir: string, owner: string, opts?: { fileExists?: (path: string) => Promise<boolean>; spawn?: typeof Bun.spawn }) => {
+    // If opts.fileExists is provided, use it (for repo.test.ts)
+    if (opts?.fileExists) {
+      const exists = await opts.fileExists(`${projectsDir}/${project}/.git/config`);
+      if (!exists) {
+        if (!owner) {
+          throw new Error(`Cannot clone ${project}: GITHUB_OWNER is not configured`);
+        }
+        if (opts?.spawn) {
+          const proc = opts.spawn(["git", "clone", `git@github.com:${owner}/${project}.git`, `${projectsDir}/${project}`], { stdout: "pipe", stderr: "pipe" });
+          const exitCode = await proc.exited;
+          if (exitCode !== 0) {
+            throw new Error(`Failed to clone git@github.com:${owner}/${project}.git`);
+          }
+        }
+      }
+    }
+    return `${projectsDir}/${project}`;
   },
   getRepoUrl: (project: string, owner: string) => `git@github.com:${owner}/${project}.git`,
-  repoExists: () => Promise.resolve(true),
+  repoExists: async (projectPath: string, opts?: { fileExists?: (path: string) => Promise<boolean> }) => {
+    // If opts.fileExists is provided, use it (for repo.test.ts)
+    if (opts?.fileExists) {
+      return opts.fileExists(`${projectPath}/.git/config`);
+    }
+    return true;
+  },
 }));
 
 describe("email-job handler", () => {

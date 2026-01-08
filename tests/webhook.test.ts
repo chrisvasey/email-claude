@@ -18,7 +18,6 @@ import {
   verifySignature,
   extractProject,
   isAllowedSender,
-  getMessageId,
   handleHealth,
   handleEmailWebhook,
   createServer,
@@ -159,37 +158,6 @@ describe("webhook module", () => {
     });
   });
 
-  describe("getMessageId", () => {
-    test("extracts Message-ID from headers", () => {
-      const headers = [
-        { name: "From", value: "sender@example.com" },
-        { name: "Message-ID", value: "<abc123@mail.example.com>" },
-        { name: "Date", value: "Mon, 1 Jan 2024 12:00:00 +0000" },
-      ];
-
-      expect(getMessageId(headers)).toBe("<abc123@mail.example.com>");
-    });
-
-    test("handles case-insensitive header name", () => {
-      const headers = [{ name: "message-id", value: "<xyz789@mail.example.com>" }];
-
-      expect(getMessageId(headers)).toBe("<xyz789@mail.example.com>");
-    });
-
-    test("returns empty string when Message-ID not found", () => {
-      const headers = [
-        { name: "From", value: "sender@example.com" },
-        { name: "Date", value: "Mon, 1 Jan 2024 12:00:00 +0000" },
-      ];
-
-      expect(getMessageId(headers)).toBe("");
-    });
-
-    test("returns empty string for empty headers array", () => {
-      expect(getMessageId([])).toBe("");
-    });
-  });
-
   describe("handleHealth", () => {
     test("returns 200 with ok status", async () => {
       const response = handleHealth();
@@ -225,17 +193,14 @@ describe("webhook module", () => {
     function createValidPayload(): ResendInboundPayload {
       return {
         type: "email.received",
+        created_at: "2024-01-01T00:00:00.000Z",
         data: {
+          email_id: "test-email-123",
           from: "allowed@example.com",
           to: ["my-project@code.patch.agency"],
           subject: "Test Feature Request",
-          text: "Please implement this feature",
-          headers: [
-            {
-              name: "Message-ID",
-              value: "<test-123@mail.example.com>",
-            },
-          ],
+          message_id: "<test-123@mail.example.com>",
+          created_at: "2024-01-01T00:00:00.000Z",
         },
       };
     }

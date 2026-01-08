@@ -47,13 +47,14 @@ export const config = {
 
 **Flow:**
 ```
-1. Receive POST from Resend
+1. Receive POST from Resend (metadata only, no body)
 2. Verify webhook signature (HMAC)
-3. Parse email: from, to, subject, body
+3. Parse webhook: type, email_id, from, to, subject
 4. Check sender against allowlist
 5. Extract project from "to" address (webapp@domain → webapp)
-6. Push job ID to Redis queue
-7. Return 200 OK
+6. Fetch email content via GET /emails/receiving/:email_id
+7. Push job to Redis queue
+8. Return 200 OK
 ```
 
 **Key functions:**
@@ -70,10 +71,10 @@ async function queueJob(job: EmailJob): Promise<string>
 # Start webhook server
 bun run webhook
 
-# Send test request
+# Send test request (Resend webhook format - metadata only)
 curl -X POST http://localhost:8080/webhook/email \
   -H "Content-Type: application/json" \
-  -d '{"from":"chris@patch.agency","to":"webapp@code.patch.agency","subject":"Test","text":"Hello"}'
+  -d '{"type":"email.received","data":{"email_id":"test123","from":"chris@patch.agency","to":["webapp@code.patch.agency"],"subject":"Test","message_id":"<test@mail>"}}'
 ```
 
 ---
@@ -189,19 +190,27 @@ bun run start
 # Terminal 3: Start webhook
 bun run webhook
 
-# Terminal 4: Simulate email
+# Terminal 4: Simulate email (Resend webhook format)
+# Note: Resend webhooks only contain metadata - the server fetches
+# the email body via GET /emails/receiving/:email_id
 curl -X POST http://localhost:8080/webhook/email \
   -H "Content-Type: application/json" \
   -d '{
-    "from": "chris@patch.agency",
-    "to": "test-project@code.patch.agency",
-    "subject": "test-project - Add hello world",
-    "text": "Create a hello.txt file with Hello World",
-    "headers": {"message-id": "<test123@mail.com>"}
+    "type": "email.received",
+    "created_at": "2024-01-01T00:00:00.000Z",
+    "data": {
+      "email_id": "test-email-123",
+      "from": "chris@patch.agency",
+      "to": ["test-project@code.patch.agency"],
+      "subject": "test-project - Add hello world",
+      "message_id": "<test123@mail.com>",
+      "created_at": "2024-01-01T00:00:00.000Z",
+      "attachments": []
+    }
   }'
 ```
 
-**Expected:** Email reply with Claude's response.
+**Expected:** Server fetches email content from Resend API, then sends email reply with Claude's response.
 
 ---
 

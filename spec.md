@@ -62,25 +62,36 @@ The "To" address determines which project to work on:
 
 ### 1. Inbound Email Handler (Webhook)
 
-**Location:** VPS running Deno
+**Location:** VPS running Bun
 
 **Responsibilities:**
-- Receive webhook POST from Resend
+- Receive webhook POST from Resend (metadata only)
 - Validate webhook signature (security)
-- Parse sender, subject, body, attachments
+- Parse webhook: email_id, sender, subject
 - Extract project name from "to" address
+- Fetch email content via Resend API (`GET /emails/receiving/:email_id`)
 - Generate/lookup session ID from subject line hash
 - Queue job for processing
 
 ```typescript
-// POST /webhook/email
-interface InboundEmail {
-  from: string;
-  to: string;
-  subject: string;
-  text: string;
-  html: string;
-  attachments: Attachment[];
+// POST /webhook/email - Resend webhook payload (metadata only)
+interface ResendInboundPayload {
+  type: "email.received";
+  created_at: string;
+  data: {
+    email_id: string;      // Used to fetch full content
+    from: string;
+    to: string[];
+    subject: string;
+    message_id: string;
+    attachments?: Array<{ filename: string }>;  // Metadata only
+  };
+}
+
+// Fetched via GET /emails/receiving/:email_id
+interface EmailContent {
+  text?: string;
+  html?: string;
   headers: Record<string, string>;
 }
 ```
