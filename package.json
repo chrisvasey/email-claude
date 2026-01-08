@@ -12,6 +12,7 @@
     "test:other": "bun test tests/config.test.ts tests/git.test.ts tests/handlers/email-job.test.ts tests/mailer.test.ts tests/session.test.ts tests/webhook.test.ts"
   },
   "dependencies": {
+    "@react-email/components": "1.0.4",
     "redis": "^4.7.0",
     "resend": "^4.0.0"
   },

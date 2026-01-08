@@ -5,6 +5,9 @@
  */
 
 import { Resend } from "resend";
+import { render } from "@react-email/components";
+import { SuccessEmail } from "./emails/success-email.tsx";
+import { ErrorEmail } from "./emails/error-email.tsx";
 
 export interface EmailReply {
   to: string;
@@ -77,25 +80,25 @@ export async function sendReply(
 /**
  * Format a success reply from Claude result
  */
-export function formatSuccessReply(
+export async function formatSuccessReply(
   result: ClaudeResult,
   job: EmailJob
-): EmailReply {
+): Promise<EmailReply> {
   const lines: string[] = [];
 
-  lines.push("## Summary");
+  lines.push("Summary");
   lines.push(result.summary);
   lines.push("");
 
   if (result.filesChanged.length > 0) {
-    lines.push("## Changes");
+    lines.push("Changes");
     for (const file of result.filesChanged) {
       lines.push(`- ${file}`);
     }
     lines.push("");
   }
 
-  lines.push("## Links");
+  lines.push("Links");
   if (result.prUrl) {
     lines.push(`- PR: ${result.prUrl}`);
   }
@@ -105,21 +108,34 @@ export function formatSuccessReply(
   lines.push("---");
   lines.push("Reply to this email to continue the conversation.");
 
+  const html = await render(
+    SuccessEmail({
+      summary: result.summary,
+      filesChanged: result.filesChanged,
+      prUrl: result.prUrl,
+      branchName: `email/${job.sessionId}`,
+    })
+  );
+
   return {
     to: job.replyTo,
     subject: `Re: ${job.originalSubject}`,
     inReplyTo: job.messageId,
     text: lines.join("\n"),
+    html,
   };
 }
 
 /**
  * Format an error reply
  */
-export function formatErrorReply(error: Error, job: EmailJob): EmailReply {
+export async function formatErrorReply(
+  error: Error,
+  job: EmailJob
+): Promise<EmailReply> {
   const lines: string[] = [];
 
-  lines.push("## Error");
+  lines.push("Error");
   lines.push("");
   lines.push("An error occurred while processing your request:");
   lines.push("");
@@ -128,11 +144,18 @@ export function formatErrorReply(error: Error, job: EmailJob): EmailReply {
   lines.push("---");
   lines.push("Reply to try again or start a new task.");
 
+  const html = await render(
+    ErrorEmail({
+      errorMessage: error.message,
+    })
+  );
+
   return {
     to: job.replyTo,
     subject: `Re: ${job.originalSubject}`,
     inReplyTo: job.messageId,
     text: lines.join("\n"),
+    html,
   };
 }
 
