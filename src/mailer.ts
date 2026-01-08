@@ -159,6 +159,35 @@ export async function formatErrorReply(
   };
 }
 
+/**
+ * Send a "sender not allowed" error email
+ */
+export async function sendNotAllowedEmail(
+  to: string,
+  subject: string,
+  messageId: string,
+  fromEmail: string
+): Promise<void> {
+  const errorMessage =
+    "Your email address is not in the allowed senders list. Please contact the administrator to be added.";
+
+  const html = await render(
+    ErrorEmail({
+      errorMessage,
+    })
+  );
+
+  const reply: EmailReply = {
+    to,
+    subject: `Re: ${subject}`,
+    inReplyTo: messageId,
+    text: `Error\n\n${errorMessage}`,
+    html,
+  };
+
+  await sendReply(reply, fromEmail);
+}
+
 // Allow resetting the client for testing
 export function _resetResendClient(): void {
   resendClient = null;
