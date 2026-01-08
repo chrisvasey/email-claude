@@ -65,21 +65,38 @@ describe("mailer module", () => {
       const job = createMockJob();
       const result = createMockResult();
 
-      const reply = formatSuccessReply(result, job);
+      const reply = await formatSuccessReply(result, job);
 
       expect(reply.to).toBe("user@example.com");
       expect(reply.subject).toBe("Re: Bug fix request");
       expect(reply.inReplyTo).toBe("<msg-123@mail.example.com>");
 
-      expect(reply.text).toContain("## Summary");
+      expect(reply.text).toContain("Summary");
       expect(reply.text).toContain("Fixed the authentication bug");
-      expect(reply.text).toContain("## Changes");
+      expect(reply.text).toContain("Changes");
       expect(reply.text).toContain("- src/auth.ts");
       expect(reply.text).toContain("- tests/auth.test.ts");
-      expect(reply.text).toContain("## Links");
+      expect(reply.text).toContain("Links");
       expect(reply.text).toContain("- PR: https://github.com/owner/repo/pull/42");
       expect(reply.text).toContain("- Branch: email/session-abc");
       expect(reply.text).toContain("Reply to this email to continue the conversation.");
+    });
+
+    test("generates HTML content", async () => {
+      const { formatSuccessReply, _resetResendClient } = await import("../src/mailer.ts");
+      _resetResendClient();
+
+      const job = createMockJob();
+      const result = createMockResult();
+
+      const reply = await formatSuccessReply(result, job);
+
+      expect(reply.html).toBeDefined();
+      expect(reply.html).toContain("<!DOCTYPE html");
+      expect(reply.html).toContain("Fixed the authentication bug");
+      expect(reply.html).toContain("src/auth.ts");
+      expect(reply.html).toContain("https://github.com/owner/repo/pull/42");
+      expect(reply.html).toContain("email/session-abc");
     });
 
     test("handles missing PR URL", async () => {
@@ -89,10 +106,10 @@ describe("mailer module", () => {
       const job = createMockJob();
       const result = createMockResult({ prUrl: undefined, prNumber: undefined });
 
-      const reply = formatSuccessReply(result, job);
+      const reply = await formatSuccessReply(result, job);
 
       expect(reply.text).not.toContain("- PR:");
-      expect(reply.text).toContain("## Links");
+      expect(reply.text).toContain("Links");
       expect(reply.text).toContain("- Branch: email/session-abc");
     });
 
@@ -103,9 +120,9 @@ describe("mailer module", () => {
       const job = createMockJob();
       const result = createMockResult({ filesChanged: [] });
 
-      const reply = formatSuccessReply(result, job);
+      const reply = await formatSuccessReply(result, job);
 
-      expect(reply.text).not.toContain("## Changes");
+      expect(reply.text).not.toContain("Changes");
     });
   });
 
@@ -117,15 +134,30 @@ describe("mailer module", () => {
       const job = createMockJob();
       const error = new Error("Connection timeout");
 
-      const reply = formatErrorReply(error, job);
+      const reply = await formatErrorReply(error, job);
 
       expect(reply.to).toBe("user@example.com");
       expect(reply.subject).toBe("Re: Bug fix request");
       expect(reply.inReplyTo).toBe("<msg-123@mail.example.com>");
-      expect(reply.text).toContain("## Error");
+      expect(reply.text).toContain("Error");
       expect(reply.text).toContain("An error occurred while processing your request:");
       expect(reply.text).toContain("Connection timeout");
       expect(reply.text).toContain("Reply to try again or start a new task.");
+    });
+
+    test("generates HTML content for errors", async () => {
+      const { formatErrorReply, _resetResendClient } = await import("../src/mailer.ts");
+      _resetResendClient();
+
+      const job = createMockJob();
+      const error = new Error("Connection timeout");
+
+      const reply = await formatErrorReply(error, job);
+
+      expect(reply.html).toBeDefined();
+      expect(reply.html).toContain("<!DOCTYPE html");
+      expect(reply.html).toContain("Connection timeout");
+      expect(reply.html).toContain("An error occurred");
     });
   });
 

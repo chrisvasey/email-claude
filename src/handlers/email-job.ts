@@ -134,11 +134,11 @@ export async function handleEmailJob(
     }
 
     // 8. Send success email reply
-    await sendReply(formatSuccessReply(result, job), ctx.fromEmail);
+    await sendReply(await formatSuccessReply(result, job), ctx.fromEmail);
   } catch (error) {
     // On error: send error email reply
     const err = error instanceof Error ? error : new Error(String(error));
-    await sendReply(formatErrorReply(err, job), ctx.fromEmail);
+    await sendReply(await formatErrorReply(err, job), ctx.fromEmail);
     throw error; // Re-throw to allow caller to handle
   }
 }

@@ -14,6 +14,7 @@ import {
   hashSubject,
   type InboundEmail,
 } from "./session";
+import { sendNotAllowedEmail } from "./mailer";
 import type { Database } from "bun:sqlite";
 
 // Resend webhook payload interface
@@ -241,9 +242,25 @@ export async function handleEmailWebhook(
   // Log incoming email
   console.log(`[Webhook] Received email from ${payload.data.from}`);
   console.log(`[Webhook] Subject: ${payload.data.subject}`);
+  console.log(`[Webhook] Allowed senders: ${cfg.security.allowedSenders.join(", ") || "(none - all allowed)"}`);
 
   // Check sender against allowlist
   if (!isAllowedSender(payload.data.from, cfg.security.allowedSenders)) {
+    console.log(`[Webhook] Sender not in allowlist, sending error email`);
+
+    // Send error email to the sender
+    try {
+      await sendNotAllowedEmail(
+        payload.data.from,
+        payload.data.subject,
+        payload.data.message_id || "",
+        cfg.resend.fromEmail
+      );
+      console.log(`[Webhook] Sent not-allowed error email to ${payload.data.from}`);
+    } catch (emailError) {
+      console.error(`[Webhook] Failed to send not-allowed email:`, emailError);
+    }
+
     return new Response(JSON.stringify({ error: "Sender not allowed" }), {
       status: 403,
       headers: { "Content-Type": "application/json" },
