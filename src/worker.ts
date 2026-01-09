@@ -103,7 +103,7 @@ async function scheduleRetry(
           ),
           job
         ),
-        config.resend.fromEmail
+        `${job.project}@${config.resend.fromDomain}`
       );
     } catch (emailError) {
       console.error(`[Worker] Failed to send final error email:`, emailError);
@@ -188,7 +188,7 @@ async function processJob(job: EmailJob): Promise<void> {
   const ctx: JobContext = {
     db: getDb(),
     projectsDir: config.paths.projectsDir,
-    fromEmail: config.resend.fromEmail,
+    fromDomain: config.resend.fromDomain,
     githubOwner: config.github.owner,
   };
 

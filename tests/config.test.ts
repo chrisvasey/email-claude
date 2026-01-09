@@ -11,7 +11,7 @@ describe("config", () => {
     originalEnv.REDIS_PREFIX = process.env.REDIS_PREFIX;
     originalEnv.RESEND_API_KEY = process.env.RESEND_API_KEY;
     originalEnv.RESEND_WEBHOOK_SECRET = process.env.RESEND_WEBHOOK_SECRET;
-    originalEnv.RESEND_FROM_EMAIL = process.env.RESEND_FROM_EMAIL;
+    originalEnv.RESEND_FROM_DOMAIN = process.env.RESEND_FROM_DOMAIN;
     originalEnv.ALLOWED_SENDERS = process.env.ALLOWED_SENDERS;
     originalEnv.PROJECTS_DIR = process.env.PROJECTS_DIR;
     originalEnv.SESSIONS_DB = process.env.SESSIONS_DB;
@@ -21,7 +21,7 @@ describe("config", () => {
     delete process.env.REDIS_PREFIX;
     delete process.env.RESEND_API_KEY;
     delete process.env.RESEND_WEBHOOK_SECRET;
-    delete process.env.RESEND_FROM_EMAIL;
+    delete process.env.RESEND_FROM_DOMAIN;
     delete process.env.ALLOWED_SENDERS;
     delete process.env.PROJECTS_DIR;
     delete process.env.SESSIONS_DB;
@@ -46,7 +46,7 @@ describe("config", () => {
       expect(cfg.redis.prefix).toBe("email_claude_");
       expect(cfg.resend.apiKey).toBe("");
       expect(cfg.resend.webhookSecret).toBe("");
-      expect(cfg.resend.fromEmail).toBe("claude@code.patch.agency");
+      expect(cfg.resend.fromDomain).toBe("cc.kindred.agency");
       expect(cfg.security.allowedSenders).toEqual([]);
       expect(cfg.paths.projectsDir).toBe("./projects");
       expect(cfg.paths.sessionsDb).toBe("./db/sessions.db");
@@ -57,7 +57,7 @@ describe("config", () => {
       process.env.REDIS_PREFIX = "custom_prefix_";
       process.env.RESEND_API_KEY = "re_test_key";
       process.env.RESEND_WEBHOOK_SECRET = "whsec_secret";
-      process.env.RESEND_FROM_EMAIL = "test@example.com";
+      process.env.RESEND_FROM_DOMAIN = "example.com";
       process.env.PROJECTS_DIR = "/custom/projects";
       process.env.SESSIONS_DB = "/custom/db/sessions.db";
 
@@ -67,7 +67,7 @@ describe("config", () => {
       expect(cfg.redis.prefix).toBe("custom_prefix_");
       expect(cfg.resend.apiKey).toBe("re_test_key");
       expect(cfg.resend.webhookSecret).toBe("whsec_secret");
-      expect(cfg.resend.fromEmail).toBe("test@example.com");
+      expect(cfg.resend.fromDomain).toBe("example.com");
       expect(cfg.paths.projectsDir).toBe("/custom/projects");
       expect(cfg.paths.sessionsDb).toBe("/custom/db/sessions.db");
     });
@@ -130,7 +130,7 @@ describe("config", () => {
     test("throws for missing RESEND_API_KEY", () => {
       const cfg: Config = {
         redis: { url: "redis://localhost:6379", prefix: "test_" },
-        resend: { apiKey: "", webhookSecret: "secret", fromEmail: "test@example.com" },
+        resend: { apiKey: "", webhookSecret: "secret", fromDomain: "example.com" },
         security: { allowedSenders: [] },
         paths: { projectsDir: "./projects", sessionsDb: "./db/sessions.db" },
       };
@@ -141,7 +141,7 @@ describe("config", () => {
     test("throws for missing RESEND_WEBHOOK_SECRET", () => {
       const cfg: Config = {
         redis: { url: "redis://localhost:6379", prefix: "test_" },
-        resend: { apiKey: "key", webhookSecret: "", fromEmail: "test@example.com" },
+        resend: { apiKey: "key", webhookSecret: "", fromDomain: "example.com" },
         security: { allowedSenders: [] },
         paths: { projectsDir: "./projects", sessionsDb: "./db/sessions.db" },
       };
@@ -152,7 +152,7 @@ describe("config", () => {
     test("throws with all missing required vars listed", () => {
       const cfg: Config = {
         redis: { url: "redis://localhost:6379", prefix: "test_" },
-        resend: { apiKey: "", webhookSecret: "", fromEmail: "test@example.com" },
+        resend: { apiKey: "", webhookSecret: "", fromDomain: "example.com" },
         security: { allowedSenders: [] },
         paths: { projectsDir: "./projects", sessionsDb: "./db/sessions.db" },
       };
@@ -165,7 +165,7 @@ describe("config", () => {
     test("does not throw when all required vars are set", () => {
       const cfg: Config = {
         redis: { url: "redis://localhost:6379", prefix: "test_" },
-        resend: { apiKey: "key", webhookSecret: "secret", fromEmail: "test@example.com" },
+        resend: { apiKey: "key", webhookSecret: "secret", fromDomain: "example.com" },
         security: { allowedSenders: [] },
         paths: { projectsDir: "./projects", sessionsDb: "./db/sessions.db" },
       };

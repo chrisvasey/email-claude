@@ -179,7 +179,7 @@ describe("webhook module", () => {
       resend: {
         apiKey: "re_test_key",
         webhookSecret: "test-webhook-secret",
-        fromEmail: "claude@test.example.com",
+        fromDomain: "test.example.com",
       },
       security: {
         allowedSenders: ["allowed@example.com", "*@company.com"],
@@ -330,7 +330,7 @@ describe("webhook module", () => {
         resend: {
           apiKey: "test",
           webhookSecret: "test",
-          fromEmail: "test@example.com",
+          fromDomain: "example.com",
         },
         security: {
           allowedSenders: [],
@@ -355,7 +355,7 @@ describe("webhook module", () => {
         resend: {
           apiKey: "test",
           webhookSecret: "test",
-          fromEmail: "test@example.com",
+          fromDomain: "example.com",
         },
         security: {
           allowedSenders: [],
@@ -384,7 +384,7 @@ describe("webhook module", () => {
         resend: {
           apiKey: "test",
           webhookSecret: "test",
-          fromEmail: "test@example.com",
+          fromDomain: "example.com",
         },
         security: {
           allowedSenders: [],
@@ -415,7 +415,7 @@ describe("webhook module", () => {
         resend: {
           apiKey: "test",
           webhookSecret: "test-secret",
-          fromEmail: "test@example.com",
+          fromDomain: "example.com",
         },
         security: {
           allowedSenders: [],

@@ -46,7 +46,7 @@ import { ensureOnDefaultBranch } from "../branch-safety";
 export interface JobContext {
   db: Database;
   projectsDir: string;
-  fromEmail: string;
+  fromDomain: string;
   githubOwner: string;
 }
 
@@ -73,12 +73,13 @@ export async function handleEmailJob(
 
     // 2. Branch safety: For NEW sessions only, ensure we're on default branch
     if (session.prNumber === null) {
+      const fromEmail = `${job.project}@${ctx.fromDomain}`;
       await ensureOnDefaultBranch(
         projectPath,
         job.project,
         session.branchName,
         job,
-        ctx.fromEmail
+        fromEmail
       );
     }
 
@@ -175,11 +176,13 @@ export async function handleEmailJob(
     }
 
     // 9. Send success email reply
-    await sendReply(await formatSuccessReply(result, job), ctx.fromEmail);
+    const fromEmail = `${job.project}@${ctx.fromDomain}`;
+    await sendReply(await formatSuccessReply(result, job), fromEmail);
   } catch (error) {
     // On error: send error email reply
+    const fromEmail = `${job.project}@${ctx.fromDomain}`;
     const err = error instanceof Error ? error : new Error(String(error));
-    await sendReply(await formatErrorReply(err, job), ctx.fromEmail);
+    await sendReply(await formatErrorReply(err, job), fromEmail);
     throw error; // Re-throw to allow caller to handle
   }
 }
@@ -459,6 +462,8 @@ async function handleCommand(
 ): Promise<void> {
   if (!command) return;
 
+  const fromEmail = `${job.project}@${ctx.fromDomain}`;
+
   // Commands require an existing PR
   if (session.prNumber === null) {
     const reply = {
@@ -467,7 +472,7 @@ async function handleCommand(
       inReplyTo: job.messageId,
       text: `Error: No PR exists for this session yet. Send a task email first to create a PR.`,
     };
-    await sendReply(reply, ctx.fromEmail);
+    await sendReply(reply, fromEmail);
     return;
   }
 
@@ -481,7 +486,7 @@ async function handleCommand(
           inReplyTo: job.messageId,
           text: `PR #${session.prNumber} has been merged successfully.`,
         };
-        await sendReply(reply, ctx.fromEmail);
+        await sendReply(reply, fromEmail);
         break;
       }
 
@@ -493,7 +498,7 @@ async function handleCommand(
           inReplyTo: job.messageId,
           text: `PR #${session.prNumber} has been closed without merging.`,
         };
-        await sendReply(reply, ctx.fromEmail);
+        await sendReply(reply, fromEmail);
         break;
       }
 
@@ -512,13 +517,13 @@ async function handleCommand(
             `PR URL: ${prUrl}`,
           ].join('\n'),
         };
-        await sendReply(reply, ctx.fromEmail);
+        await sendReply(reply, fromEmail);
         break;
       }
     }
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error));
-    await sendReply(await formatErrorReply(err, job), ctx.fromEmail);
+    await sendReply(await formatErrorReply(err, job), fromEmail);
     throw error;
   }
 }

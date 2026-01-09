@@ -286,6 +286,19 @@ export async function handleEmailWebhook(
   console.log(`[Webhook] Subject: ${payload.data.subject}`);
   console.log(`[Webhook] Allowed senders: ${cfg.security.allowedSenders.join(", ") || "(none - all allowed)"}`);
 
+  // Extract project from first "to" address (needed for from email)
+  const toAddress = payload.data.to[0];
+  if (!toAddress) {
+    return new Response(JSON.stringify({ error: "No recipient address" }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  const project = extractProject(toAddress);
+  console.log(`[Webhook] Project: ${project}`);
+  const fromEmail = `${project}@${cfg.resend.fromDomain}`;
+
   // Check sender against allowlist
   if (!isAllowedSender(payload.data.from, cfg.security.allowedSenders)) {
     console.log(`[Webhook] Sender not in allowlist, sending error email`);
@@ -296,7 +309,7 @@ export async function handleEmailWebhook(
         payload.data.from,
         payload.data.subject,
         payload.data.message_id || "",
-        cfg.resend.fromEmail
+        fromEmail
       );
       console.log(`[Webhook] Sent not-allowed error email to ${payload.data.from}`);
     } catch (emailError) {
@@ -308,18 +321,6 @@ export async function handleEmailWebhook(
       headers: { "Content-Type": "application/json" },
     });
   }
-
-  // Extract project from first "to" address
-  const toAddress = payload.data.to[0];
-  if (!toAddress) {
-    return new Response(JSON.stringify({ error: "No recipient address" }), {
-      status: 400,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
-
-  const project = extractProject(toAddress);
-  console.log(`[Webhook] Project: ${project}`);
 
   // Fetch full email content from Resend API (webhook only contains metadata)
   const apiKey = process.env.RESEND_API_KEY;

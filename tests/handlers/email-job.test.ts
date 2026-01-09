@@ -199,7 +199,7 @@ describe("email-job handler", () => {
     ctx = {
       db,
       projectsDir: "/projects",
-      fromEmail: "claude@example.com",
+      fromDomain: "example.com",
       githubOwner: "testowner",
     };
 
@@ -270,7 +270,7 @@ describe("email-job handler", () => {
       expect(mockFormatSuccessReply).toHaveBeenCalled();
       expect(mockSendReply).toHaveBeenCalledWith(
         expect.objectContaining({ to: "user@example.com" }),
-        "claude@example.com"
+        "my-project@example.com"
       );
     });
 

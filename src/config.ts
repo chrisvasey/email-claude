@@ -12,7 +12,7 @@ export interface Config {
   resend: {
     apiKey: string;
     webhookSecret: string;
-    fromEmail: string;
+    fromDomain: string;
   };
   github: {
     owner: string;
@@ -40,7 +40,7 @@ export function loadConfig(): Config {
     resend: {
       apiKey: process.env.RESEND_API_KEY || "",
       webhookSecret: process.env.RESEND_WEBHOOK_SECRET || "",
-      fromEmail: process.env.RESEND_FROM_EMAIL || "claude@code.patch.agency",
+      fromDomain: process.env.RESEND_FROM_DOMAIN || "cc.kindred.agency",
     },
     github: {
       owner: process.env.GITHUB_OWNER || "",
