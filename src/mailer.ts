@@ -246,7 +246,7 @@ export async function formatBranchNoticeEmail(
 
   return {
     to: job.replyTo,
-    subject: `[Notice] Re: ${job.originalSubject}`,
+    subject: `Re: ${job.originalSubject}`,
     inReplyTo: job.messageId,
     text: lines.join("\n"),
     html,
