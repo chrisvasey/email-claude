@@ -19,41 +19,9 @@ const mockRedis = {
   lPush: mock(() => Promise.resolve(1)),
 };
 
-// Mock config
-mock.module("../src/config", () => ({
-  config: {
-    redis: {
-      url: "redis://localhost:6379",
-      prefix: "email-claude:",
-    },
-    paths: {
-      projectsDir: "/tmp/projects",
-      sessionsDb: ":memory:",
-    },
-    resend: {
-      fromEmail: "test@example.com",
-    },
-    github: {
-      owner: "testowner",
-    },
-  },
-}));
-
-// Mock mailer
-mock.module("../src/mailer", () => ({
-  sendReply: mock(() => Promise.resolve()),
-  formatErrorReply: mock(() =>
-    Promise.resolve({
-      to: "user@example.com",
-      subject: "Re: Test",
-      text: "Error message",
-    })
-  ),
-}));
-
-// Now import the worker functions (after mocks are set up)
-// Note: We'll test the functions directly by re-implementing them here
-// since the worker module has side effects (starts the worker)
+// Note: This test file re-implements the pure functions locally to test them
+// without triggering the worker's side effects (Redis connection, infinite loop).
+// We do NOT use mock.module here to avoid polluting the module cache for other tests.
 
 import type { EmailJob } from "../src/mailer";
 

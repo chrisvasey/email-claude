@@ -68,10 +68,16 @@ mock.module("../../src/prompts", () => ({
   buildFullPrompt: (...args: unknown[]) => mockBuildFullPrompt(...args),
 }));
 
+// Mock mailer - must export ALL functions to prevent polluting module cache
 mock.module("../../src/mailer", () => ({
   sendReply: (...args: unknown[]) => mockSendReply(...args),
   formatSuccessReply: (...args: unknown[]) => mockFormatSuccessReply(...args),
   formatErrorReply: (...args: unknown[]) => mockFormatErrorReply(...args),
+  // Include all other exports to prevent module cache pollution
+  sendNotAllowedEmail: mock(() => Promise.resolve()),
+  formatBranchNoticeEmail: mock(() => Promise.resolve({ to: "", subject: "", text: "" })),
+  getResend: mock(() => ({ emails: { send: mock(() => Promise.resolve()) } })),
+  _resetResendClient: mock(() => {}),
 }));
 
 let mockAddSessionMessage: ReturnType<typeof mock>;
