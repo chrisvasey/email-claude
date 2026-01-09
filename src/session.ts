@@ -105,9 +105,9 @@ export function initDb(dbPath: string): Database {
   `);
 
 	// Migration: add mode and pending_plan columns if they don't exist
-	const columns = db
-		.prepare("PRAGMA table_info(sessions)")
-		.all() as { name: string }[];
+	const columns = db.prepare("PRAGMA table_info(sessions)").all() as {
+		name: string;
+	}[];
 	const columnNames = columns.map((c) => c.name);
 
 	if (!columnNames.includes("mode")) {
