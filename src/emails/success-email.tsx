@@ -8,6 +8,12 @@ import {
   Hr,
   Section,
 } from "@react-email/components";
+import { marked } from "marked";
+
+// Convert markdown to HTML
+function renderMarkdown(text: string): string {
+  return marked.parse(text, { async: false }) as string;
+}
 
 interface SuccessEmailProps {
   summary: string;
@@ -31,7 +37,10 @@ export function SuccessEmail({
         <Container style={container}>
           <Section>
             <Text style={heading}>Summary</Text>
-            <Text style={text}>{summary}</Text>
+            <div
+              style={markdownContent}
+              dangerouslySetInnerHTML={{ __html: renderMarkdown(summary) }}
+            />
           </Section>
 
           {filesChanged.length > 0 && (
@@ -91,6 +100,13 @@ const heading = {
 };
 
 const text = {
+  fontSize: "14px",
+  lineHeight: "24px",
+  color: "#333333",
+  margin: "0 0 16px 0",
+};
+
+const markdownContent = {
   fontSize: "14px",
   lineHeight: "24px",
   color: "#333333",

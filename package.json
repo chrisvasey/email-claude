@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@react-email/components": "1.0.4",
+    "marked": "^17.0.1",
     "redis": "^4.7.0",
     "resend": "^4.0.0"
   },

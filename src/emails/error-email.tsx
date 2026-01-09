@@ -7,6 +7,12 @@ import {
   Hr,
   Section,
 } from "@react-email/components";
+import { marked } from "marked";
+
+// Convert markdown to HTML
+function renderMarkdown(text: string): string {
+  return marked.parse(text, { async: false }) as string;
+}
 
 interface ErrorEmailProps {
   errorMessage: string;
@@ -23,7 +29,10 @@ export function ErrorEmail({ errorMessage }: ErrorEmailProps) {
             <Text style={text}>
               An error occurred while processing your request:
             </Text>
-            <Text style={errorText}>{errorMessage}</Text>
+            <div
+              style={errorText}
+              dangerouslySetInnerHTML={{ __html: renderMarkdown(errorMessage) }}
+            />
           </Section>
 
           <Hr style={hr} />
