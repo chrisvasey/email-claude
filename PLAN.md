@@ -22,7 +22,7 @@ export const config = {
   resend: {
     apiKey: process.env.RESEND_API_KEY!,
     webhookSecret: process.env.RESEND_WEBHOOK_SECRET!,
-    fromEmail: process.env.RESEND_FROM_EMAIL!,
+    fromDomain: process.env.RESEND_FROM_DOMAIN!,
   },
   security: {
     allowedSenders: (process.env.ALLOWED_SENDERS || "").split(","),
@@ -380,6 +380,7 @@ const prUrl = await getPRUrl(projectPath, session.prNumber);
 - [x] Attachment handling (fetched from Resend, saved to disk, paths passed to Claude)
 - [x] Error handling & retry logic (exponential backoff, max 3 retries, dead letter queue)
 - [x] Special commands ([merge], [close], [status]) via `src/commands.ts`
+- [x] Dynamic from email - responses from `{project}@{domain}` for thread continuity
 
 ### Step 4.1: Error Handling & Retries
 **File:** `src/handlers/email-job.ts`

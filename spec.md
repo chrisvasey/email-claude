@@ -384,6 +384,7 @@ email-claude/
 - [x] Attachment handling (fetched from Resend, saved to disk)
 - [x] Error handling & retry logic (exponential backoff, max 3 retries)
 - [x] Special commands ([merge], [close], [status])
+- [x] Dynamic from email - responses from `{project}@{domain}` for thread continuity
 
 ### Phase 4: Nice-to-haves
 - [ ] Web dashboard for monitoring
@@ -401,7 +402,7 @@ REDIS_PREFIX=email_claude_
 # Resend
 RESEND_API_KEY=re_xxxxx
 RESEND_WEBHOOK_SECRET=whsec_xxxxx
-RESEND_FROM_EMAIL=claude@code.patch.agency
+RESEND_FROM_DOMAIN=code.patch.agency  # Responses sent from {project}@{domain}
 
 # GitHub
 # Owner/org for auto-cloning: email-claude@domain -> github.com/GITHUB_OWNER/email-claude
@@ -617,3 +618,4 @@ The Redis BLPOP pattern is identical. Key differences:
 - [x] Handle attachments (save to disk, pass to Claude)
 - [x] Special commands ([merge], [close], [status])
 - [x] Retry logic with exponential backoff (max 3 retries)
+- [x] Dynamic from email (`{project}@{domain}`) for thread continuity

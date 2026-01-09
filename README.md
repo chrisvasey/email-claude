@@ -32,7 +32,7 @@ REDIS_PREFIX=email_claude_
 # Resend
 RESEND_API_KEY=re_xxxxx
 RESEND_WEBHOOK_SECRET=whsec_xxxxx
-RESEND_FROM_EMAIL=claude@code.patch.agency
+RESEND_FROM_DOMAIN=code.patch.agency  # Responses sent from {project}@{domain}
 
 # GitHub (for auto-cloning repos)
 # email-claude@code.patch.agency -> github.com/GITHUB_OWNER/email-claude
@@ -141,6 +141,7 @@ bun test src/config.test.ts
 - [x] Attachment handling (saved to disk, paths passed to Claude)
 - [x] Error handling & retry logic (exponential backoff, max 3 retries)
 - [x] Special commands ([merge], [close], [status])
+- [x] Dynamic from email - responses come from `{project}@{domain}` for thread continuity
 
 ## Docker Deployment
 

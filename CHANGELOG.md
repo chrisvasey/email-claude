@@ -11,6 +11,11 @@ All notable changes to this project will be documented in this file.
 - New module: `src/branch-safety.ts` for branch safety logic
 - New email template: `src/emails/branch-notice-email.tsx`
 
+### Changed
+- **Dynamic from email**: Response emails now come from `{project}@{domain}` instead of a static address
+  - Ensures email thread continuity when replying
+  - Config changed from `RESEND_FROM_EMAIL` to `RESEND_FROM_DOMAIN`
+
 ## [0.3.0] - 2026-01-09
 
 ### Added - Phase 3 Complete
