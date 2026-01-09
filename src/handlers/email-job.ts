@@ -22,12 +22,13 @@ import {
   mergePR,
   closePR,
 } from "../git";
-import { parseCommand, type Command } from "../commands";
+import { parseCommand, detectPlanTrigger, detectApproval, type Command } from "../commands";
 import { ensureRepo } from "../services/repo";
 import {
   sendReply,
   formatSuccessReply,
   formatErrorReply,
+  formatPlanReply,
   type EmailJob,
   type ClaudeResult,
   type EmailAttachment,
@@ -40,7 +41,7 @@ import {
   getSessionMessages,
   type Session,
 } from "../session";
-import { buildFullPrompt } from "../prompts";
+import { buildFullPrompt, buildPlanPrompt, buildExecutionPrompt, buildRevisionPrompt } from "../prompts";
 import { ensureOnDefaultBranch } from "../branch-safety";
 
 export interface JobContext {
@@ -51,7 +52,7 @@ export interface JobContext {
 }
 
 /**
- * Main handler - orchestrates the full email job flow
+ * Main handler - orchestrates the full email job flow with plan mode support
  */
 export async function handleEmailJob(
   job: EmailJob,
@@ -59,132 +60,375 @@ export async function handleEmailJob(
   ctx: JobContext
 ): Promise<void> {
   const projectPath = `${ctx.projectsDir}/${job.project}`;
+  const fromEmail = `${job.project}@${ctx.fromDomain}`;
 
   try {
     // 0. Check for special commands before running Claude
     const command = parseCommand(job.originalSubject);
-    if (command) {
+
+    // Handle cancel command for plan mode
+    if (command?.type === 'cancel' && session.mode === 'plan_pending') {
+      await handleCancelPlan(session, job, ctx);
+      return;
+    }
+
+    // Handle confirm command for plan mode (treat as approval)
+    if (command?.type === 'confirm' && session.mode === 'plan_pending') {
+      await handlePlanExecution(job, session, ctx, projectPath);
+      return;
+    }
+
+    // Handle other commands (merge, close, status) - these require existing PR
+    if (command && command.type !== 'plan') {
       await handleCommand(command, session, job, projectPath, ctx);
       return;
     }
 
-    // 1. Ensure repo exists (clone if needed)
-    await ensureRepo(job.project, ctx.projectsDir, ctx.githubOwner);
-
-    // 2. Branch safety: For NEW sessions only, ensure we're on default branch
-    if (session.prNumber === null) {
-      const fromEmail = `${job.project}@${ctx.fromDomain}`;
-      await ensureOnDefaultBranch(
-        projectPath,
-        job.project,
-        session.branchName,
-        job,
-        fromEmail
-      );
+    // 1. Check if session is in plan_pending mode (waiting for approval/revision)
+    if (session.mode === 'plan_pending') {
+      await handlePlanPendingReply(job, session, ctx, projectPath);
+      return;
     }
 
-    // 3. Setup git branch
-    await ensureBranch(projectPath, session.branchName);
+    // 2. Check for plan triggers (explicit [plan] command or natural language)
+    const isPlanRequest =
+      command?.type === 'plan' ||
+      detectPlanTrigger(job.originalSubject, job.prompt);
 
-    // 3.5. Save attachments (if any)
-    const attachmentPaths = await saveAttachments(
-      job.attachments,
-      session.id,
-      projectPath
-    );
-
-    // 4. Save user's message to conversation history (include subject for context)
-    const userMessage = job.prompt.trim()
-      ? `Subject: ${job.originalSubject}\n\n${job.prompt}`
-      : job.originalSubject;
-    addSessionMessage(ctx.db, session.id, "user", userMessage);
-
-    // 5. Run Claude Code with prompt (includes system instructions for atomic commits)
-    // Append attachment info to prompt if files were saved
-    let promptWithAttachments = buildFullPrompt(job.originalSubject, job.prompt);
-    if (attachmentPaths.length > 0) {
-      promptWithAttachments += `\n\n---\n\nAttached files (saved to disk):\n${attachmentPaths.map(p => `- ${p}`).join('\n')}`;
-    }
-    const result = await runClaude(projectPath, promptWithAttachments, session);
-
-    // 6. Save Claude's response to conversation history
-    addSessionMessage(ctx.db, session.id, "assistant", result.summary);
-
-    // 6.5. Save Claude session ID for --resume support (first run only)
-    if (result.claudeSessionId && session.claudeSessionId === null) {
-      updateSession(ctx.db, session.id, { claudeSessionId: result.claudeSessionId });
+    if (isPlanRequest) {
+      await handlePlanRequest(job, session, ctx, projectPath);
+      return;
     }
 
-    // 7. Handle PR creation or commenting (only if there are commits)
-    const hasCommits = await hasCommitsAhead(projectPath);
-
-    if (hasCommits) {
-      if (session.prNumber === null) {
-        // First PR: Include full conversation history
-        const messages = getSessionMessages(ctx.db, session.id);
-        const conversationHistory = messages
-          .map((msg) => {
-            const label = msg.role === "user" ? "**User:**" : "**Claude:**";
-            return `${label}\n\n${msg.content}`;
-          })
-          .join("\n\n---\n\n");
-
-        const prBody = [
-          "## Conversation",
-          "",
-          conversationHistory,
-          "",
-          "---",
-          "",
-          `Session: \`${session.id}\``,
-        ].join("\n");
-
-        const prNumber = await createPR(
-          projectPath,
-          `[Email] ${job.originalSubject}`,
-          prBody
-        );
-
-        // Update session with PR number
-        updateSession(ctx.db, session.id, { prNumber });
-        result.prNumber = prNumber;
-      } else {
-        // Subsequent email: Add comment to existing PR
-        const requestContent = job.prompt.trim()
-          ? `Subject: ${job.originalSubject}\n\n${job.prompt}`
-          : job.originalSubject;
-        const comment = [
-          "## Follow-up Request",
-          "",
-          "```",
-          requestContent,
-          "```",
-          "",
-          "## Claude's Response",
-          "",
-          result.summary,
-        ].join("\n");
-
-        await commentOnPR(projectPath, session.prNumber, comment);
-        result.prNumber = session.prNumber;
-      }
-
-      // 8. Get PR URL
-      if (result.prNumber !== null && result.prNumber !== undefined) {
-        result.prUrl = await getPRUrl(projectPath, result.prNumber);
-      }
-    }
-
-    // 9. Send success email reply
-    const fromEmail = `${job.project}@${ctx.fromDomain}`;
-    await sendReply(await formatSuccessReply(result, job), fromEmail);
+    // 3. Normal execution flow
+    await handleNormalExecution(job, session, ctx, projectPath);
   } catch (error) {
     // On error: send error email reply
-    const fromEmail = `${job.project}@${ctx.fromDomain}`;
     const err = error instanceof Error ? error : new Error(String(error));
     await sendReply(await formatErrorReply(err, job), fromEmail);
     throw error; // Re-throw to allow caller to handle
   }
+}
+
+/**
+ * Handle initial plan request - generate plan and wait for approval
+ */
+async function handlePlanRequest(
+  job: EmailJob,
+  session: Session,
+  ctx: JobContext,
+  projectPath: string
+): Promise<void> {
+  const fromEmail = `${job.project}@${ctx.fromDomain}`;
+
+  // Ensure repo and branch exist
+  await ensureRepo(job.project, ctx.projectsDir, ctx.githubOwner);
+  if (session.prNumber === null) {
+    await ensureOnDefaultBranch(
+      projectPath,
+      job.project,
+      session.branchName,
+      job,
+      fromEmail
+    );
+  }
+  await ensureBranch(projectPath, session.branchName);
+
+  // Save user's plan request
+  const userMessage = job.prompt.trim()
+    ? `Subject: ${job.originalSubject}\n\n${job.prompt}`
+    : job.originalSubject;
+  addSessionMessage(ctx.db, session.id, "user", `[Plan Request] ${userMessage}`);
+
+  // Run Claude in plan-only mode
+  const planPrompt = buildPlanPrompt(job.originalSubject, job.prompt);
+  const result = await runClaude(projectPath, planPrompt, session);
+
+  // Store the plan and update session mode
+  updateSession(ctx.db, session.id, {
+    mode: 'plan_pending',
+    pendingPlan: result.summary,
+    claudeSessionId: result.claudeSessionId ?? session.claudeSessionId,
+  });
+
+  // Save Claude's plan to conversation history
+  addSessionMessage(ctx.db, session.id, "assistant", `[Plan]\n\n${result.summary}`);
+
+  // Send plan email to user
+  await sendReply(await formatPlanReply(result.summary, job, false), fromEmail);
+}
+
+/**
+ * Handle reply to a pending plan - check for approval vs revision
+ */
+async function handlePlanPendingReply(
+  job: EmailJob,
+  session: Session,
+  ctx: JobContext,
+  projectPath: string
+): Promise<void> {
+  // Check if this is an approval
+  const isApproval = detectApproval(job.originalSubject, job.prompt);
+
+  if (isApproval) {
+    await handlePlanExecution(job, session, ctx, projectPath);
+  } else {
+    await handlePlanRevision(job, session, ctx, projectPath);
+  }
+}
+
+/**
+ * Execute an approved plan
+ */
+async function handlePlanExecution(
+  job: EmailJob,
+  session: Session,
+  ctx: JobContext,
+  projectPath: string
+): Promise<void> {
+  const fromEmail = `${job.project}@${ctx.fromDomain}`;
+
+  // Ensure repo and branch exist
+  await ensureRepo(job.project, ctx.projectsDir, ctx.githubOwner);
+  await ensureBranch(projectPath, session.branchName);
+
+  // Save user's approval
+  const approvalMessage = job.prompt.trim() || 'Approved';
+  addSessionMessage(ctx.db, session.id, "user", `[Approved] ${approvalMessage}`);
+
+  // Build execution prompt with the approved plan
+  const execPrompt = buildExecutionPrompt(
+    job.originalSubject,
+    job.prompt,
+    session.pendingPlan!
+  );
+
+  // Clear plan_pending mode BEFORE execution
+  updateSession(ctx.db, session.id, {
+    mode: 'normal',
+    pendingPlan: null,
+  });
+
+  // Run Claude to execute
+  const result = await runClaude(projectPath, execPrompt, session);
+
+  // Save response
+  addSessionMessage(ctx.db, session.id, "assistant", result.summary);
+
+  // Update Claude session ID if needed
+  if (result.claudeSessionId && session.claudeSessionId === null) {
+    updateSession(ctx.db, session.id, { claudeSessionId: result.claudeSessionId });
+  }
+
+  // Continue with PR creation/update flow
+  await finalizePRAndReply(job, session, ctx, projectPath, result);
+}
+
+/**
+ * Handle plan revision request
+ */
+async function handlePlanRevision(
+  job: EmailJob,
+  session: Session,
+  ctx: JobContext,
+  projectPath: string
+): Promise<void> {
+  const fromEmail = `${job.project}@${ctx.fromDomain}`;
+
+  // Ensure repo and branch exist
+  await ensureRepo(job.project, ctx.projectsDir, ctx.githubOwner);
+  await ensureBranch(projectPath, session.branchName);
+
+  // Save revision request
+  const userMessage = job.prompt.trim()
+    ? `Subject: ${job.originalSubject}\n\n${job.prompt}`
+    : job.originalSubject;
+  addSessionMessage(ctx.db, session.id, "user", `[Revision Request] ${userMessage}`);
+
+  // Build revision prompt that includes the original plan
+  const revisionPrompt = buildRevisionPrompt(
+    job.originalSubject,
+    job.prompt,
+    session.pendingPlan!
+  );
+
+  // Run Claude to revise the plan
+  const result = await runClaude(projectPath, revisionPrompt, session);
+
+  // Update the pending plan
+  updateSession(ctx.db, session.id, {
+    pendingPlan: result.summary,
+    claudeSessionId: result.claudeSessionId ?? session.claudeSessionId,
+  });
+
+  // Save revised plan
+  addSessionMessage(ctx.db, session.id, "assistant", `[Revised Plan]\n\n${result.summary}`);
+
+  // Send updated plan email
+  await sendReply(await formatPlanReply(result.summary, job, true), fromEmail);
+}
+
+/**
+ * Handle cancel command for pending plan
+ */
+async function handleCancelPlan(
+  session: Session,
+  job: EmailJob,
+  ctx: JobContext
+): Promise<void> {
+  const fromEmail = `${job.project}@${ctx.fromDomain}`;
+
+  // Clear plan mode
+  updateSession(ctx.db, session.id, {
+    mode: 'normal',
+    pendingPlan: null,
+  });
+
+  addSessionMessage(ctx.db, session.id, "user", "[Cancelled]");
+
+  await sendReply({
+    to: job.replyTo,
+    subject: `Re: ${job.originalSubject}`,
+    inReplyTo: job.messageId,
+    text: "Plan cancelled. You can start a new request by sending another email.",
+  }, fromEmail);
+}
+
+/**
+ * Normal execution flow (original behavior)
+ */
+async function handleNormalExecution(
+  job: EmailJob,
+  session: Session,
+  ctx: JobContext,
+  projectPath: string
+): Promise<void> {
+  const fromEmail = `${job.project}@${ctx.fromDomain}`;
+
+  // 1. Ensure repo exists (clone if needed)
+  await ensureRepo(job.project, ctx.projectsDir, ctx.githubOwner);
+
+  // 2. Branch safety: For NEW sessions only, ensure we're on default branch
+  if (session.prNumber === null) {
+    await ensureOnDefaultBranch(
+      projectPath,
+      job.project,
+      session.branchName,
+      job,
+      fromEmail
+    );
+  }
+
+  // 3. Setup git branch
+  await ensureBranch(projectPath, session.branchName);
+
+  // 3.5. Save attachments (if any)
+  const attachmentPaths = await saveAttachments(
+    job.attachments,
+    session.id,
+    projectPath
+  );
+
+  // 4. Save user's message to conversation history (include subject for context)
+  const userMessage = job.prompt.trim()
+    ? `Subject: ${job.originalSubject}\n\n${job.prompt}`
+    : job.originalSubject;
+  addSessionMessage(ctx.db, session.id, "user", userMessage);
+
+  // 5. Run Claude Code with prompt (includes system instructions for atomic commits)
+  // Append attachment info to prompt if files were saved
+  let promptWithAttachments = buildFullPrompt(job.originalSubject, job.prompt);
+  if (attachmentPaths.length > 0) {
+    promptWithAttachments += `\n\n---\n\nAttached files (saved to disk):\n${attachmentPaths.map(p => `- ${p}`).join('\n')}`;
+  }
+  const result = await runClaude(projectPath, promptWithAttachments, session);
+
+  // 6. Save Claude's response to conversation history
+  addSessionMessage(ctx.db, session.id, "assistant", result.summary);
+
+  // 6.5. Save Claude session ID for --resume support (first run only)
+  if (result.claudeSessionId && session.claudeSessionId === null) {
+    updateSession(ctx.db, session.id, { claudeSessionId: result.claudeSessionId });
+  }
+
+  // 7. Handle PR creation/commenting and send reply
+  await finalizePRAndReply(job, session, ctx, projectPath, result);
+}
+
+/**
+ * Finalize PR creation/commenting and send success reply
+ */
+async function finalizePRAndReply(
+  job: EmailJob,
+  session: Session,
+  ctx: JobContext,
+  projectPath: string,
+  result: ClaudeResult
+): Promise<void> {
+  const fromEmail = `${job.project}@${ctx.fromDomain}`;
+
+  // Handle PR creation or commenting (only if there are commits)
+  const hasCommits = await hasCommitsAhead(projectPath);
+
+  if (hasCommits) {
+    if (session.prNumber === null) {
+      // First PR: Include full conversation history
+      const messages = getSessionMessages(ctx.db, session.id);
+      const conversationHistory = messages
+        .map((msg) => {
+          const label = msg.role === "user" ? "**User:**" : "**Claude:**";
+          return `${label}\n\n${msg.content}`;
+        })
+        .join("\n\n---\n\n");
+
+      const prBody = [
+        "## Conversation",
+        "",
+        conversationHistory,
+        "",
+        "---",
+        "",
+        `Session: \`${session.id}\``,
+      ].join("\n");
+
+      const prNumber = await createPR(
+        projectPath,
+        `[Email] ${job.originalSubject}`,
+        prBody
+      );
+
+      // Update session with PR number
+      updateSession(ctx.db, session.id, { prNumber });
+      result.prNumber = prNumber;
+    } else {
+      // Subsequent email: Add comment to existing PR
+      const requestContent = job.prompt.trim()
+        ? `Subject: ${job.originalSubject}\n\n${job.prompt}`
+        : job.originalSubject;
+      const comment = [
+        "## Follow-up Request",
+        "",
+        "```",
+        requestContent,
+        "```",
+        "",
+        "## Claude's Response",
+        "",
+        result.summary,
+      ].join("\n");
+
+      await commentOnPR(projectPath, session.prNumber, comment);
+      result.prNumber = session.prNumber;
+    }
+
+    // Get PR URL
+    if (result.prNumber !== null && result.prNumber !== undefined) {
+      result.prUrl = await getPRUrl(projectPath, result.prNumber);
+    }
+  }
+
+  // Send success email reply
+  await sendReply(await formatSuccessReply(result, job), fromEmail);
 }
 
 /**

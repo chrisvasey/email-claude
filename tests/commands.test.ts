@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { parseCommand } from "../src/commands";
+import { parseCommand, detectPlanTrigger, detectApproval } from "../src/commands";
 
 describe("commands", () => {
   describe("parseCommand", () => {
@@ -87,6 +87,52 @@ describe("commands", () => {
       });
     });
 
+    describe("plan command", () => {
+      test("parses [plan] command", () => {
+        expect(parseCommand("[plan]")).toEqual({ type: "plan" });
+      });
+
+      test("parses [plan] at start of subject", () => {
+        expect(parseCommand("[plan] Add user authentication")).toEqual({ type: "plan" });
+      });
+
+      test("parses [plan] at end of subject", () => {
+        expect(parseCommand("Add new feature [plan]")).toEqual({ type: "plan" });
+      });
+
+      test("parses [PLAN] uppercase", () => {
+        expect(parseCommand("[PLAN] something")).toEqual({ type: "plan" });
+      });
+    });
+
+    describe("confirm command", () => {
+      test("parses [confirm] command", () => {
+        expect(parseCommand("[confirm]")).toEqual({ type: "confirm" });
+      });
+
+      test("parses [confirm] at start of subject", () => {
+        expect(parseCommand("[confirm] Looks good")).toEqual({ type: "confirm" });
+      });
+
+      test("parses [CONFIRM] uppercase", () => {
+        expect(parseCommand("[CONFIRM]")).toEqual({ type: "confirm" });
+      });
+    });
+
+    describe("cancel command", () => {
+      test("parses [cancel] command", () => {
+        expect(parseCommand("[cancel]")).toEqual({ type: "cancel" });
+      });
+
+      test("parses [cancel] at start of subject", () => {
+        expect(parseCommand("[cancel] Never mind")).toEqual({ type: "cancel" });
+      });
+
+      test("parses [CANCEL] uppercase", () => {
+        expect(parseCommand("[CANCEL]")).toEqual({ type: "cancel" });
+      });
+    });
+
     describe("no command", () => {
       test("returns null for empty string", () => {
         expect(parseCommand("")).toBeNull();
@@ -115,6 +161,106 @@ describe("commands", () => {
       test("returns null for command with spaces [ merge]", () => {
         expect(parseCommand("[ merge]")).toBeNull();
       });
+    });
+  });
+
+  describe("detectPlanTrigger", () => {
+    test("detects 'plan for' in subject", () => {
+      expect(detectPlanTrigger("Plan for adding authentication", "")).toBe(true);
+    });
+
+    test("detects 'write a plan' in body", () => {
+      expect(detectPlanTrigger("New feature", "Write a plan for this")).toBe(true);
+    });
+
+    test("detects 'write me a plan' in body", () => {
+      expect(detectPlanTrigger("Feature", "Please write me a plan")).toBe(true);
+    });
+
+    test("detects 'before you start' in body", () => {
+      expect(detectPlanTrigger("Add login", "Before you start implementing")).toBe(true);
+    });
+
+    test("detects 'don't implement yet' in body", () => {
+      expect(detectPlanTrigger("Feature", "Don't implement yet, just outline")).toBe(true);
+    });
+
+    test("detects 'just plan' in body", () => {
+      expect(detectPlanTrigger("Feature", "Just plan this out")).toBe(true);
+    });
+
+    test("returns false for normal request", () => {
+      expect(detectPlanTrigger("Add login button", "Simple feature")).toBe(false);
+    });
+
+    test("returns false for similar but non-matching text", () => {
+      expect(detectPlanTrigger("Planning to add a button", "")).toBe(false);
+    });
+  });
+
+  describe("detectApproval", () => {
+    test("detects 'looks good'", () => {
+      expect(detectApproval("Re: Plan", "Looks good")).toBe(true);
+    });
+
+    test("detects 'lgtm'", () => {
+      expect(detectApproval("Re: Plan", "LGTM")).toBe(true);
+    });
+
+    test("detects 'approved'", () => {
+      expect(detectApproval("Re: Plan", "Approved")).toBe(true);
+    });
+
+    test("detects 'go ahead'", () => {
+      expect(detectApproval("Re: Plan", "Go ahead")).toBe(true);
+    });
+
+    test("detects 'proceed'", () => {
+      expect(detectApproval("Re: Plan", "Proceed with the plan")).toBe(true);
+    });
+
+    test("detects 'ship it'", () => {
+      expect(detectApproval("Re: Plan", "Ship it!")).toBe(true);
+    });
+
+    test("detects simple 'yes'", () => {
+      expect(detectApproval("Re: Plan", "Yes")).toBe(true);
+    });
+
+    test("detects simple 'ok'", () => {
+      expect(detectApproval("Re: Plan", "Ok")).toBe(true);
+    });
+
+    test("detects [confirm] command", () => {
+      expect(detectApproval("[confirm] Re: Plan", "")).toBe(true);
+    });
+
+    test("rejects 'looks good but...' as revision", () => {
+      expect(detectApproval("Re: Plan", "Looks good but add error handling")).toBe(false);
+    });
+
+    test("rejects questions as revision", () => {
+      expect(detectApproval("Re: Plan", "Looks good, can you also add tests?")).toBe(false);
+    });
+
+    test("rejects 'change' as revision", () => {
+      expect(detectApproval("Re: Plan", "Please change step 3")).toBe(false);
+    });
+
+    test("rejects 'instead' as revision", () => {
+      expect(detectApproval("Re: Plan", "Instead of that, do this")).toBe(false);
+    });
+
+    test("rejects 'also add' as revision", () => {
+      expect(detectApproval("Re: Plan", "Looks good, also add validation")).toBe(false);
+    });
+
+    test("rejects 'wait' as revision", () => {
+      expect(detectApproval("Re: Plan", "Wait, I want to change something")).toBe(false);
+    });
+
+    test("returns false for neutral message", () => {
+      expect(detectApproval("Re: Plan", "Thanks for the plan")).toBe(false);
     });
   });
 });

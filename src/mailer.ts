@@ -9,6 +9,7 @@ import { render } from "@react-email/components";
 import { SuccessEmail } from "./emails/success-email.tsx";
 import { ErrorEmail } from "./emails/error-email.tsx";
 import { BranchNoticeEmail } from "./emails/branch-notice-email.tsx";
+import { PlanEmail } from "./emails/plan-email.tsx";
 
 export interface EmailReply {
   to: string;
@@ -241,6 +242,46 @@ export async function formatBranchNoticeEmail(
       defaultBranch: info.defaultBranch,
       newBranch: info.newBranch,
       projectName: info.projectName,
+    })
+  );
+
+  return {
+    to: job.replyTo,
+    subject: `Re: ${job.originalSubject}`,
+    inReplyTo: job.messageId,
+    text: lines.join("\n"),
+    html,
+  };
+}
+
+/**
+ * Format a plan approval request email
+ */
+export async function formatPlanReply(
+  plan: string,
+  job: EmailJob,
+  isRevision: boolean = false
+): Promise<EmailReply> {
+  const title = isRevision ? "Revised Plan" : "Implementation Plan";
+
+  const lines: string[] = [];
+  lines.push(title);
+  lines.push("");
+  lines.push(plan);
+  lines.push("");
+  lines.push("---");
+  lines.push("");
+  lines.push("To approve this plan, reply with:");
+  lines.push("- [confirm] in the subject, OR");
+  lines.push('- "Looks good", "Approved", "Go ahead", etc.');
+  lines.push("");
+  lines.push("To request changes, simply reply with your feedback.");
+  lines.push("To cancel, reply with [cancel] in the subject.");
+
+  const html = await render(
+    PlanEmail({
+      plan,
+      isRevision,
     })
   );
 
