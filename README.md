@@ -118,7 +118,7 @@ bun test src/config.test.ts
 - [x] Plain text email replies (`src/mailer.ts`)
 - [x] Auto PR creation via `gh` CLI (`src/git.ts`)
 - [x] Email job processing (`src/handlers/email-job.ts`)
-- [x] Full test coverage (106 tests)
+- [x] Full test coverage (112 tests)
 
 ### Phase 2: Sessions & Threading - Complete
 - [x] Subject-based session tracking (via subject hash)
@@ -131,7 +131,11 @@ bun test src/config.test.ts
 ### Phase 3: Polish - In Progress
 - [x] Auto-clone repos (`GITHUB_OWNER` config)
 - [x] Docker deployment (`Dockerfile`, `docker-compose.yml`)
-- [ ] `claude --resume` integration (multi-turn conversations)
+- [x] HTML email formatting with React Email
+- [x] Error email response when sender not on whitelist
+- [x] Email subject passed to Claude as context
+- [x] GitHub Actions CI
+- [ ] `claude --resume` integration (partial: flag passed, session ID not persisted)
 - [ ] Preview deployment URL extraction
 - [ ] Attachment handling (images to Claude vision)
 - [ ] Error handling & retry logic

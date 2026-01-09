@@ -373,7 +373,12 @@ email-claude/
 - [x] Atomic commits via system instructions
 
 ### Phase 3: Polish
-- [ ] `claude --resume` integration
+- [x] Auto-clone repos (`GITHUB_OWNER` config, `src/services/repo.ts`)
+- [x] Docker deployment (`Dockerfile`, `docker-compose.yml`)
+- [x] HTML email formatting with React Email
+- [x] Error email response when sender not on whitelist
+- [x] Email subject passed to Claude as context
+- [ ] `claude --resume` integration (partial: flag passed, session ID not persisted)
 - [ ] Preview deployment URL extraction
 - [ ] Attachment handling (images → Claude vision)
 - [ ] Error handling & retry logic
@@ -599,7 +604,12 @@ The Redis BLPOP pattern is identical. Key differences:
 - [x] Atomic commits via `prompts/system.md` instructions
 
 **Phase 3 - Polish:**
-- [ ] Pass `--resume` flag for multi-turn conversations
+- [x] Auto-clone repos (`GITHUB_OWNER` config, `src/services/repo.ts`)
+- [x] Docker deployment (`Dockerfile`, `docker-compose.yml`)
+- [x] HTML email formatting with React Email
+- [x] Error email response when sender not on whitelist
+- [x] Email subject passed to Claude as context
+- [ ] Pass `--resume` flag for multi-turn conversations (partial: flag passed, session ID not persisted)
 - [ ] Store Claude session ID after first run
 - [ ] Parse Claude output for preview URLs
 - [ ] Handle attachments (save to disk, pass to Claude)
