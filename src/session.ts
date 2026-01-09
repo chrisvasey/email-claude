@@ -9,6 +9,8 @@
 import { Database } from "bun:sqlite";
 import { createHash } from "crypto";
 
+export type SessionMode = 'normal' | 'plan_pending';
+
 export interface Session {
   id: string;
   subjectHash: string;
@@ -18,6 +20,8 @@ export interface Session {
   prNumber: number | null;
   createdAt: string;
   lastActivity: string;
+  mode: SessionMode;
+  pendingPlan: string | null;
 }
 
 export interface SessionMessage {
@@ -75,7 +79,9 @@ export function initDb(dbPath: string): Database {
       claude_session_id TEXT,
       pr_number INTEGER,
       created_at TEXT NOT NULL,
-      last_activity TEXT NOT NULL
+      last_activity TEXT NOT NULL,
+      mode TEXT DEFAULT 'normal',
+      pending_plan TEXT
     )
   `);
 
@@ -115,7 +121,9 @@ export function getSession(db: Database, subjectHash: string): Session | null {
       claude_session_id as claudeSessionId,
       pr_number as prNumber,
       created_at as createdAt,
-      last_activity as lastActivity
+      last_activity as lastActivity,
+      mode,
+      pending_plan as pendingPlan
     FROM sessions
     WHERE subject_hash = ?
   `);
@@ -137,8 +145,9 @@ export function createSession(
   const stmt = db.prepare(`
     INSERT INTO sessions (
       id, subject_hash, project, branch_name,
-      claude_session_id, pr_number, created_at, last_activity
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      claude_session_id, pr_number, created_at, last_activity,
+      mode, pending_plan
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   stmt.run(
@@ -149,7 +158,9 @@ export function createSession(
     session.claudeSessionId,
     session.prNumber,
     now,
-    now
+    now,
+    session.mode,
+    session.pendingPlan
   );
 }
 
@@ -184,6 +195,16 @@ export function updateSession(
   if (updates.project !== undefined) {
     fields.push("project = ?");
     values.push(updates.project);
+  }
+
+  if (updates.mode !== undefined) {
+    fields.push("mode = ?");
+    values.push(updates.mode);
+  }
+
+  if (updates.pendingPlan !== undefined) {
+    fields.push("pending_plan = ?");
+    values.push(updates.pendingPlan);
   }
 
   values.push(id);
@@ -251,6 +272,8 @@ export function getOrCreateSession(
     branchName,
     claudeSessionId: null,
     prNumber: null,
+    mode: 'normal',
+    pendingPlan: null,
   };
 
   createSession(db, newSession);
