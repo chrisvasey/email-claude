@@ -8,6 +8,7 @@ import { Resend } from "resend";
 import { render } from "@react-email/components";
 import { SuccessEmail } from "./emails/success-email.tsx";
 import { ErrorEmail } from "./emails/error-email.tsx";
+import { BranchNoticeEmail } from "./emails/branch-notice-email.tsx";
 
 export interface EmailReply {
   to: string;
@@ -186,6 +187,55 @@ export async function sendNotAllowedEmail(
   };
 
   await sendReply(reply, fromEmail);
+}
+
+export interface BranchNoticeInfo {
+  previousBranch: string;
+  defaultBranch: string;
+  newBranch: string;
+  projectName: string;
+}
+
+/**
+ * Format a branch notice email (sent when repo was on wrong branch)
+ */
+export async function formatBranchNoticeEmail(
+  info: BranchNoticeInfo,
+  job: EmailJob
+): Promise<EmailReply> {
+  const lines: string[] = [];
+
+  lines.push("Notice: Branch Reset");
+  lines.push("");
+  lines.push(
+    `The repository ${info.projectName} was on branch "${info.previousBranch}" instead of "${info.defaultBranch}".`
+  );
+  lines.push("");
+  lines.push(
+    `For safety, we switched to "${info.defaultBranch}" before creating your feature branch "${info.newBranch}".`
+  );
+  lines.push("");
+  lines.push("Your request is being processed normally.");
+  lines.push("");
+  lines.push("---");
+  lines.push("This is an informational notice. No action is required.");
+
+  const html = await render(
+    BranchNoticeEmail({
+      previousBranch: info.previousBranch,
+      defaultBranch: info.defaultBranch,
+      newBranch: info.newBranch,
+      projectName: info.projectName,
+    })
+  );
+
+  return {
+    to: job.replyTo,
+    subject: `[Notice] Re: ${job.originalSubject}`,
+    inReplyTo: job.messageId,
+    text: lines.join("\n"),
+    html,
+  };
 }
 
 // Allow resetting the client for testing

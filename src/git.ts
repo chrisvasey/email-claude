@@ -48,6 +48,39 @@ async function runGh(projectPath: string, args: string[]): Promise<string> {
 }
 
 /**
+ * Get the default branch name for a repository (main or master)
+ * Returns "main" if both exist or neither exists
+ */
+export async function getDefaultBranch(projectPath: string): Promise<string> {
+  try {
+    await runGit(projectPath, ["rev-parse", "--verify", "main"]);
+    return "main";
+  } catch {
+    try {
+      await runGit(projectPath, ["rev-parse", "--verify", "master"]);
+      return "master";
+    } catch {
+      // Neither exists, default to main
+      return "main";
+    }
+  }
+}
+
+/**
+ * Get the current branch name
+ */
+export async function getCurrentBranch(projectPath: string): Promise<string> {
+  return await runGit(projectPath, ["rev-parse", "--abbrev-ref", "HEAD"]);
+}
+
+/**
+ * Checkout an existing branch
+ */
+export async function checkoutBranch(projectPath: string, branchName: string): Promise<void> {
+  await runGit(projectPath, ["checkout", branchName]);
+}
+
+/**
  * Ensure we're on a branch (create if needed, checkout if exists)
  */
 export async function ensureBranch(projectPath: string, branchName: string): Promise<void> {

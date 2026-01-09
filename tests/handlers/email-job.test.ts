@@ -83,6 +83,13 @@ mock.module("../../src/session", () => ({
   getSessionMessages: (...args: unknown[]) => mockGetSessionMessages(...args),
 }));
 
+// Mock branch-safety module
+let mockEnsureOnDefaultBranch: ReturnType<typeof mock>;
+
+mock.module("../../src/branch-safety", () => ({
+  ensureOnDefaultBranch: (...args: unknown[]) => mockEnsureOnDefaultBranch(...args),
+}));
+
 // Mock ensureRepo to always succeed (repo exists)
 // Note: We forward opts to allow repo.test.ts to use dependency injection
 mock.module("../../src/services/repo", () => ({
@@ -123,6 +130,11 @@ describe("email-job handler", () => {
 
   beforeEach(() => {
     // Reset all mocks
+    mockEnsureOnDefaultBranch = mock(() => Promise.resolve({
+      notificationSent: false,
+      previousBranch: "main",
+      defaultBranch: "main",
+    }));
     mockEnsureBranch = mock(() => Promise.resolve());
     mockCreatePR = mock(() => Promise.resolve(42));
     mockGetPRUrl = mock(() =>

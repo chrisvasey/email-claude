@@ -35,6 +35,7 @@ import {
   type Session,
 } from "../session";
 import { buildFullPrompt } from "../prompts";
+import { ensureOnDefaultBranch } from "../branch-safety";
 
 export interface JobContext {
   db: Database;
@@ -57,23 +58,34 @@ export async function handleEmailJob(
     // 1. Ensure repo exists (clone if needed)
     await ensureRepo(job.project, ctx.projectsDir, ctx.githubOwner);
 
-    // 2. Setup git branch
+    // 2. Branch safety: For NEW sessions only, ensure we're on default branch
+    if (session.prNumber === null) {
+      await ensureOnDefaultBranch(
+        projectPath,
+        job.project,
+        session.branchName,
+        job,
+        ctx.fromEmail
+      );
+    }
+
+    // 3. Setup git branch
     await ensureBranch(projectPath, session.branchName);
 
-    // 3. Save user's message to conversation history (include subject for context)
+    // 4. Save user's message to conversation history (include subject for context)
     const userMessage = job.prompt.trim()
       ? `Subject: ${job.originalSubject}\n\n${job.prompt}`
       : job.originalSubject;
     addSessionMessage(ctx.db, session.id, "user", userMessage);
 
-    // 4. Run Claude Code with prompt (includes system instructions for atomic commits)
+    // 5. Run Claude Code with prompt (includes system instructions for atomic commits)
     const fullPrompt = buildFullPrompt(job.originalSubject, job.prompt);
     const result = await runClaude(projectPath, fullPrompt, session);
 
-    // 5. Save Claude's response to conversation history
+    // 6. Save Claude's response to conversation history
     addSessionMessage(ctx.db, session.id, "assistant", result.summary);
 
-    // 6. Handle PR creation or commenting (only if there are commits)
+    // 7. Handle PR creation or commenting (only if there are commits)
     const hasCommits = await hasCommitsAhead(projectPath);
 
     if (hasCommits) {
@@ -127,13 +139,13 @@ export async function handleEmailJob(
         result.prNumber = session.prNumber;
       }
 
-      // 7. Get PR URL
+      // 8. Get PR URL
       if (result.prNumber !== null && result.prNumber !== undefined) {
         result.prUrl = await getPRUrl(projectPath, result.prNumber);
       }
     }
 
-    // 8. Send success email reply
+    // 9. Send success email reply
     await sendReply(await formatSuccessReply(result, job), ctx.fromEmail);
   } catch (error) {
     // On error: send error email reply
