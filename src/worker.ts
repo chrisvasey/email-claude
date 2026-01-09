@@ -13,7 +13,7 @@
  */
 
 import type { Database } from "bun:sqlite";
-import { createClient, type RedisClientType } from "redis";
+import { RedisClient } from "bun";
 import { config } from "./config";
 import { handleEmailJob, type JobContext } from "./handlers/email-job";
 import type { EmailJob } from "./mailer";
@@ -76,7 +76,7 @@ function calculateRetryDelay(retryCount: number): number {
  * Schedule a job for retry
  */
 async function scheduleRetry(
-	redis: RedisClientType,
+	redis: RedisClient,
 	job: EmailJob,
 	error: Error,
 ): Promise<void> {
@@ -92,7 +92,7 @@ async function scheduleRetry(
 			failedAt: new Date().toISOString(),
 			lastError: error.message,
 		};
-		await redis.lPush(FAILED_QUEUE_NAME, JSON.stringify(failedJob));
+		await redis.lpush(FAILED_QUEUE_NAME, JSON.stringify(failedJob));
 
 		// Send final error email to user
 		try {
@@ -124,20 +124,17 @@ async function scheduleRetry(
 	);
 
 	// Add to retry sorted set with score = timestamp when to retry
-	await redis.zAdd(RETRY_QUEUE_NAME, {
-		score: retryAt,
-		value: JSON.stringify(retryJob),
-	});
+	await redis.zadd(RETRY_QUEUE_NAME, String(retryAt), JSON.stringify(retryJob));
 }
 
 /**
  * Process jobs from the retry queue that are ready
  */
-async function processRetryQueue(redis: RedisClientType): Promise<number> {
+async function processRetryQueue(redis: RedisClient): Promise<number> {
 	const now = Date.now();
 
 	// Get all jobs that are ready to be retried (score <= now)
-	const readyJobs = await redis.zRangeByScore(RETRY_QUEUE_NAME, 0, now);
+	const readyJobs = await redis.zrangebyscore(RETRY_QUEUE_NAME, 0, now);
 
 	if (readyJobs.length === 0) {
 		return 0;
@@ -147,11 +144,11 @@ async function processRetryQueue(redis: RedisClientType): Promise<number> {
 
 	for (const jobJson of readyJobs) {
 		// Remove from retry queue
-		const removed = await redis.zRem(RETRY_QUEUE_NAME, jobJson);
+		const removed = await redis.zrem(RETRY_QUEUE_NAME, jobJson);
 
 		if (removed > 0) {
 			// Add to pending queue for processing
-			await redis.rPush(QUEUE_NAME, jobJson);
+			await redis.rpush(QUEUE_NAME, jobJson);
 			movedCount++;
 
 			try {
@@ -202,7 +199,7 @@ async function processJob(job: EmailJob): Promise<void> {
  * Start the retry processor loop
  * This runs alongside the main job loop and checks for jobs ready to retry
  */
-async function startRetryProcessor(redis: RedisClientType): Promise<void> {
+async function startRetryProcessor(redis: RedisClient): Promise<void> {
 	console.log("[Worker] Starting retry processor loop");
 
 	while (true) {
@@ -234,32 +231,27 @@ async function runWorker(): Promise<void> {
 	getDb();
 	console.log("[Worker] Database initialized");
 
-	const redis = createClient({ url: REDIS_URL });
-
-	redis.on("error", (err) => {
-		console.error("[Worker] Redis error:", err);
-	});
-
-	await redis.connect();
+	const redis = new RedisClient(REDIS_URL);
 	console.log("[Worker] Connected to Redis");
 
 	// Start retry processor in the background
-	startRetryProcessor(redis as RedisClientType);
+	startRetryProcessor(redis);
 
 	console.log("[Worker] Waiting for jobs...");
 
 	while (true) {
 		try {
 			// Block waiting for a job (BLPOP with 30s timeout)
-			const result = await redis.blPop(QUEUE_NAME, 30);
+			const result = await redis.blpop(QUEUE_NAME, 30);
 
 			if (result) {
 				// Parse job JSON from Redis (webhook pushes full job object)
+				// Bun's blpop returns [key, element] tuple
 				let job: EmailJob;
 				try {
-					job = JSON.parse(result.element);
+					job = JSON.parse(result[1]);
 				} catch {
-					console.error(`[Worker] Invalid job JSON: ${result.element}`);
+					console.error(`[Worker] Invalid job JSON: ${result[1]}`);
 					continue;
 				}
 
@@ -276,7 +268,7 @@ async function runWorker(): Promise<void> {
 					);
 
 					// Schedule retry instead of dropping the job
-					await scheduleRetry(redis as RedisClientType, job, err);
+					await scheduleRetry(redis, job, err);
 				}
 			}
 		} catch (error) {

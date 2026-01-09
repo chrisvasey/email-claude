@@ -7,7 +7,7 @@
 
 import type { Database } from "bun:sqlite";
 import { createHmac } from "node:crypto";
-import { createClient, type RedisClientType } from "redis";
+import { RedisClient } from "bun";
 import { type Config, config } from "./config";
 import { type EmailJob, sendNotAllowedEmail } from "./mailer";
 import { getOrCreateSession, type InboundEmail, initDb } from "./session";
@@ -204,7 +204,7 @@ function generateJobId(): string {
 }
 
 // Server state
-let redisClient: RedisClientType | null = null;
+let redisClient: RedisClient | null = null;
 let db: Database | null = null;
 
 /**
@@ -214,9 +214,8 @@ export async function initServer(cfg: Config): Promise<void> {
 	// Initialize SQLite database
 	db = initDb(cfg.paths.sessionsDb);
 
-	// Connect to Redis
-	redisClient = createClient({ url: cfg.redis.url });
-	await redisClient.connect();
+	// Connect to Redis (auto-connects)
+	redisClient = new RedisClient(cfg.redis.url);
 }
 
 /**
@@ -224,7 +223,7 @@ export async function initServer(cfg: Config): Promise<void> {
  */
 export async function closeServer(): Promise<void> {
 	if (redisClient) {
-		await redisClient.quit();
+		redisClient.close();
 		redisClient = null;
 	}
 	if (db) {
@@ -420,12 +419,11 @@ export async function handleEmailWebhook(
 
 	// Push job to Redis queue
 	if (!redisClient) {
-		redisClient = createClient({ url: cfg.redis.url });
-		await redisClient.connect();
+		redisClient = new RedisClient(cfg.redis.url);
 	}
 
 	const queueKey = `${cfg.redis.prefix}jobs:pending`;
-	await redisClient.lPush(queueKey, JSON.stringify(job));
+	await redisClient.lpush(queueKey, JSON.stringify(job));
 	console.log(`[Webhook] Job queued: ${jobId.slice(0, 8)}`);
 
 	// Return success with job ID
