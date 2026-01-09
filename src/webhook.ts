@@ -32,23 +32,17 @@ export interface ResendInboundPayload {
     html?: string;
     message_id: string;
     created_at: string;
-    attachments?: Array<{ filename: string; content: string }>;
+    // Webhook only sends metadata - content must be fetched via download_url
+    attachments?: Array<{
+      filename: string;
+      content_type?: string;
+      download_url?: string;
+    }>;
   };
 }
 
-// Email job to push to queue
-export interface EmailJob {
-  id: string;
-  sessionId: string;
-  project: string;
-  prompt: string;
-  replyTo: string;
-  originalSubject: string;
-  messageId: string;
-  resumeSession: boolean;
-  attachments?: string[];
-  createdAt: string;
-}
+// Re-export EmailJob from mailer for consistency
+export type { EmailJob, EmailAttachment } from "./mailer";
 
 /**
  * Verify Resend webhook signature (HMAC-SHA256)
@@ -93,6 +87,54 @@ export function verifySignature(
   }
 
   return false;
+}
+
+/**
+ * Fetch attachment content from Resend download URL
+ * Returns base64 encoded content
+ */
+async function fetchAttachmentContent(downloadUrl: string): Promise<string> {
+  const response = await fetch(downloadUrl);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch attachment: ${response.status}`);
+  }
+  const buffer = Buffer.from(await response.arrayBuffer());
+  return buffer.toString('base64');
+}
+
+/**
+ * Fetch all attachment contents in parallel
+ */
+async function fetchAttachments(
+  attachments: Array<{ filename: string; content_type?: string; download_url?: string }> | undefined
+): Promise<Array<{ filename: string; content: string; contentType?: string }>> {
+  if (!attachments || attachments.length === 0) {
+    return [];
+  }
+
+  const results = await Promise.all(
+    attachments.map(async (att) => {
+      if (!att.download_url) {
+        console.log(`[Webhook] Attachment ${att.filename} has no download_url, skipping`);
+        return null;
+      }
+
+      try {
+        const content = await fetchAttachmentContent(att.download_url);
+        console.log(`[Webhook] Fetched attachment: ${att.filename}`);
+        return {
+          filename: att.filename,
+          content,
+          contentType: att.content_type,
+        };
+      } catch (error) {
+        console.error(`[Webhook] Failed to fetch attachment ${att.filename}:`, error);
+        return null;
+      }
+    })
+  );
+
+  return results.filter((r): r is NonNullable<typeof r> => r !== null);
 }
 
 /**
@@ -333,6 +375,12 @@ export async function handleEmailWebhook(
   // Generate job ID
   const jobId = generateJobId();
 
+  // Fetch attachment contents (if any)
+  const attachments = await fetchAttachments(payload.data.attachments);
+  if (attachments.length > 0) {
+    console.log(`[Webhook] Fetched ${attachments.length} attachment(s)`);
+  }
+
   // Create email job
   const job: EmailJob = {
     id: jobId,
@@ -343,7 +391,7 @@ export async function handleEmailWebhook(
     originalSubject: payload.data.subject,
     messageId: payload.data.message_id || "",
     resumeSession,
-    attachments: payload.data.attachments?.map((a) => a.filename),
+    attachments: attachments.length > 0 ? attachments : undefined,
     createdAt: new Date().toISOString(),
   };
 

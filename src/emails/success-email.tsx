@@ -13,6 +13,7 @@ interface SuccessEmailProps {
   summary: string;
   filesChanged: string[];
   prUrl?: string;
+  previewUrls?: string[];
   branchName: string;
 }
 
@@ -20,6 +21,7 @@ export function SuccessEmail({
   summary,
   filesChanged,
   prUrl,
+  previewUrls,
   branchName,
 }: SuccessEmailProps) {
   return (
@@ -50,6 +52,11 @@ export function SuccessEmail({
                 • PR: <Link href={prUrl} style={link}>{prUrl}</Link>
               </Text>
             )}
+            {previewUrls && previewUrls.length > 0 && previewUrls.map((url, index) => (
+              <Text key={index} style={listItem}>
+                • Preview: <Link href={url} style={link}>{url}</Link>
+              </Text>
+            ))}
             <Text style={listItem}>• Branch: {branchName}</Text>
           </Section>
 

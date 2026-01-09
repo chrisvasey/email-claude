@@ -23,7 +23,15 @@ export interface ClaudeResult {
   filesChanged: string[];
   prUrl?: string;
   prNumber?: number;
+  previewUrls?: string[];
+  claudeSessionId?: string | null;
   error?: string;
+}
+
+export interface EmailAttachment {
+  filename: string;
+  content: string;  // Base64 encoded
+  contentType?: string;
 }
 
 export interface EmailJob {
@@ -35,8 +43,9 @@ export interface EmailJob {
   originalSubject: string;
   messageId: string;
   resumeSession: boolean;
-  attachments?: string[];
+  attachments?: EmailAttachment[];
   createdAt: string;
+  retryCount?: number;
 }
 
 // Create Resend client (lazy initialization)
@@ -103,6 +112,11 @@ export async function formatSuccessReply(
   if (result.prUrl) {
     lines.push(`- PR: ${result.prUrl}`);
   }
+  if (result.previewUrls && result.previewUrls.length > 0) {
+    for (const url of result.previewUrls) {
+      lines.push(`- Preview: ${url}`);
+    }
+  }
   lines.push(`- Branch: email/${job.sessionId}`);
   lines.push("");
 
@@ -114,6 +128,7 @@ export async function formatSuccessReply(
       summary: result.summary,
       filesChanged: result.filesChanged,
       prUrl: result.prUrl,
+      previewUrls: result.previewUrls,
       branchName: `email/${job.sessionId}`,
     })
   );
