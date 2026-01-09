@@ -5,44 +5,39 @@
  * Verifies signatures, validates senders, and queues jobs for processing.
  */
 
-import { createClient, type RedisClientType } from "redis";
-import { createHash, createHmac } from "crypto";
-import { config, type Config } from "./config";
-import {
-  initDb,
-  getOrCreateSession,
-  hashSubject,
-  type InboundEmail,
-} from "./session";
-import { sendNotAllowedEmail } from "./mailer";
 import type { Database } from "bun:sqlite";
+import { createHmac } from "node:crypto";
+import { createClient, type RedisClientType } from "redis";
+import { type Config, config } from "./config";
+import { type EmailJob, sendNotAllowedEmail } from "./mailer";
+import { getOrCreateSession, type InboundEmail, initDb } from "./session";
 
 // Resend webhook payload interface
 export interface ResendInboundPayload {
-  type: "email.received";
-  created_at: string;
-  data: {
-    email_id: string;
-    from: string;
-    to: string[];
-    cc?: string[];
-    bcc?: string[];
-    subject: string;
-    text?: string;
-    html?: string;
-    message_id: string;
-    created_at: string;
-    // Webhook only sends metadata - content must be fetched via download_url
-    attachments?: Array<{
-      filename: string;
-      content_type?: string;
-      download_url?: string;
-    }>;
-  };
+	type: "email.received";
+	created_at: string;
+	data: {
+		email_id: string;
+		from: string;
+		to: string[];
+		cc?: string[];
+		bcc?: string[];
+		subject: string;
+		text?: string;
+		html?: string;
+		message_id: string;
+		created_at: string;
+		// Webhook only sends metadata - content must be fetched via download_url
+		attachments?: Array<{
+			filename: string;
+			content_type?: string;
+			download_url?: string;
+		}>;
+	};
 }
 
 // Re-export EmailJob from mailer for consistency
-export type { EmailJob, EmailAttachment } from "./mailer";
+export type { EmailAttachment, EmailJob } from "./mailer";
 
 /**
  * Verify Resend webhook signature (HMAC-SHA256)
@@ -53,40 +48,40 @@ export type { EmailJob, EmailAttachment } from "./mailer";
  * We compute HMAC-SHA256 of "{timestamp}.{payload}" and compare
  */
 export function verifySignature(
-  payload: string,
-  signature: string,
-  secret: string
+	payload: string,
+	signature: string,
+	secret: string,
 ): boolean {
-  // Parse the svix-signature header
-  // Format: "v1,{timestamp},{signature}" or multiple signatures separated by space
-  const parts = signature.split(" ");
+	// Parse the svix-signature header
+	// Format: "v1,{timestamp},{signature}" or multiple signatures separated by space
+	const parts = signature.split(" ");
 
-  for (const part of parts) {
-    // Handle "v1,timestamp,sig" format
-    const segments = part.split(",");
-    if (segments.length >= 2) {
-      const version = segments[0];
-      if (version === "v1") {
-        const timestamp = segments[1];
-        const sig = segments[2] || segments[1]; // Sometimes timestamp is omitted
+	for (const part of parts) {
+		// Handle "v1,timestamp,sig" format
+		const segments = part.split(",");
+		if (segments.length >= 2) {
+			const version = segments[0];
+			if (version === "v1") {
+				const timestamp = segments[1];
+				const sig = segments[2] || segments[1]; // Sometimes timestamp is omitted
 
-        // If we have timestamp, payload is "{timestamp}.{body}"
-        const signedPayload = timestamp ? `${timestamp}.${payload}` : payload;
+				// If we have timestamp, payload is "{timestamp}.{body}"
+				const signedPayload = timestamp ? `${timestamp}.${payload}` : payload;
 
-        // Compute expected signature
-        const expected = createHmac("sha256", secret)
-          .update(signedPayload)
-          .digest("base64");
+				// Compute expected signature
+				const expected = createHmac("sha256", secret)
+					.update(signedPayload)
+					.digest("base64");
 
-        // Compare signatures (timing-safe comparison)
-        if (sig === expected) {
-          return true;
-        }
-      }
-    }
-  }
+				// Compare signatures (timing-safe comparison)
+				if (sig === expected) {
+					return true;
+				}
+			}
+		}
+	}
 
-  return false;
+	return false;
 }
 
 /**
@@ -94,47 +89,54 @@ export function verifySignature(
  * Returns base64 encoded content
  */
 async function fetchAttachmentContent(downloadUrl: string): Promise<string> {
-  const response = await fetch(downloadUrl);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch attachment: ${response.status}`);
-  }
-  const buffer = Buffer.from(await response.arrayBuffer());
-  return buffer.toString('base64');
+	const response = await fetch(downloadUrl);
+	if (!response.ok) {
+		throw new Error(`Failed to fetch attachment: ${response.status}`);
+	}
+	const buffer = Buffer.from(await response.arrayBuffer());
+	return buffer.toString("base64");
 }
 
 /**
  * Fetch all attachment contents in parallel
  */
 async function fetchAttachments(
-  attachments: Array<{ filename: string; content_type?: string; download_url?: string }> | undefined
+	attachments:
+		| Array<{ filename: string; content_type?: string; download_url?: string }>
+		| undefined,
 ): Promise<Array<{ filename: string; content: string; contentType?: string }>> {
-  if (!attachments || attachments.length === 0) {
-    return [];
-  }
+	if (!attachments || attachments.length === 0) {
+		return [];
+	}
 
-  const results = await Promise.all(
-    attachments.map(async (att) => {
-      if (!att.download_url) {
-        console.log(`[Webhook] Attachment ${att.filename} has no download_url, skipping`);
-        return null;
-      }
+	const results = await Promise.all(
+		attachments.map(async (att) => {
+			if (!att.download_url) {
+				console.log(
+					`[Webhook] Attachment ${att.filename} has no download_url, skipping`,
+				);
+				return null;
+			}
 
-      try {
-        const content = await fetchAttachmentContent(att.download_url);
-        console.log(`[Webhook] Fetched attachment: ${att.filename}`);
-        return {
-          filename: att.filename,
-          content,
-          contentType: att.content_type,
-        };
-      } catch (error) {
-        console.error(`[Webhook] Failed to fetch attachment ${att.filename}:`, error);
-        return null;
-      }
-    })
-  );
+			try {
+				const content = await fetchAttachmentContent(att.download_url);
+				console.log(`[Webhook] Fetched attachment: ${att.filename}`);
+				return {
+					filename: att.filename,
+					content,
+					contentType: att.content_type,
+				};
+			} catch (error) {
+				console.error(
+					`[Webhook] Failed to fetch attachment ${att.filename}:`,
+					error,
+				);
+				return null;
+			}
+		}),
+	);
 
-  return results.filter((r): r is NonNullable<typeof r> => r !== null);
+	return results.filter((r): r is NonNullable<typeof r> => r !== null);
 }
 
 /**
@@ -143,15 +145,15 @@ async function fetchAttachments(
  * my-project@code.patch.agency -> my-project
  */
 export function extractProject(toAddress: string): string {
-  // Handle email format: "Name <email@domain>" or just "email@domain"
-  const emailMatch = toAddress.match(/<([^>]+)>/) || [null, toAddress];
-  const email = emailMatch[1] || toAddress;
+	// Handle email format: "Name <email@domain>" or just "email@domain"
+	const emailMatch = toAddress.match(/<([^>]+)>/) || [null, toAddress];
+	const email = emailMatch[1] || toAddress;
 
-  // Extract local part before @
-  const localPart = email.split("@")[0];
+	// Extract local part before @
+	const localPart = email.split("@")[0];
 
-  // Return the local part as project name
-  return localPart.toLowerCase().trim();
+	// Return the local part as project name
+	return localPart.toLowerCase().trim();
 }
 
 /**
@@ -159,46 +161,46 @@ export function extractProject(toAddress: string): string {
  * Supports exact email match or wildcard domain match (*@domain.com)
  */
 export function isAllowedSender(
-  from: string,
-  allowedSenders: string[]
+	from: string,
+	allowedSenders: string[],
 ): boolean {
-  // If allowlist is empty, allow all senders
-  if (allowedSenders.length === 0) {
-    return true;
-  }
+	// If allowlist is empty, allow all senders
+	if (allowedSenders.length === 0) {
+		return true;
+	}
 
-  // Extract email from "Name <email>" format
-  const emailMatch = from.match(/<([^>]+)>/) || [null, from];
-  const email = (emailMatch[1] || from).toLowerCase().trim();
+	// Extract email from "Name <email>" format
+	const emailMatch = from.match(/<([^>]+)>/) || [null, from];
+	const email = (emailMatch[1] || from).toLowerCase().trim();
 
-  for (const allowed of allowedSenders) {
-    const normalizedAllowed = allowed.toLowerCase().trim();
+	for (const allowed of allowedSenders) {
+		const normalizedAllowed = allowed.toLowerCase().trim();
 
-    // Wildcard domain match: *@domain.com
-    if (normalizedAllowed.startsWith("*@")) {
-      const domain = normalizedAllowed.slice(2);
-      if (email.endsWith(`@${domain}`)) {
-        return true;
-      }
-    }
-    // Exact email match
-    else if (email === normalizedAllowed) {
-      return true;
-    }
-  }
+		// Wildcard domain match: *@domain.com
+		if (normalizedAllowed.startsWith("*@")) {
+			const domain = normalizedAllowed.slice(2);
+			if (email.endsWith(`@${domain}`)) {
+				return true;
+			}
+		}
+		// Exact email match
+		else if (email === normalizedAllowed) {
+			return true;
+		}
+	}
 
-  return false;
+	return false;
 }
 
 /**
  * Generate a unique job ID
  */
 function generateJobId(): string {
-  const bytes = new Uint8Array(16);
-  crypto.getRandomValues(bytes);
-  return Array.from(bytes)
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
+	const bytes = new Uint8Array(16);
+	crypto.getRandomValues(bytes);
+	return Array.from(bytes)
+		.map((b) => b.toString(16).padStart(2, "0"))
+		.join("");
 }
 
 // Server state
@@ -209,278 +211,298 @@ let db: Database | null = null;
  * Initialize server dependencies
  */
 export async function initServer(cfg: Config): Promise<void> {
-  // Initialize SQLite database
-  db = initDb(cfg.paths.sessionsDb);
+	// Initialize SQLite database
+	db = initDb(cfg.paths.sessionsDb);
 
-  // Connect to Redis
-  redisClient = createClient({ url: cfg.redis.url });
-  await redisClient.connect();
+	// Connect to Redis
+	redisClient = createClient({ url: cfg.redis.url });
+	await redisClient.connect();
 }
 
 /**
  * Close server dependencies
  */
 export async function closeServer(): Promise<void> {
-  if (redisClient) {
-    await redisClient.quit();
-    redisClient = null;
-  }
-  if (db) {
-    db.close();
-    db = null;
-  }
+	if (redisClient) {
+		await redisClient.quit();
+		redisClient = null;
+	}
+	if (db) {
+		db.close();
+		db = null;
+	}
 }
 
 /**
  * Health check handler for GET /health
  */
 export function handleHealth(): Response {
-  return new Response(JSON.stringify({ status: "ok" }), {
-    status: 200,
-    headers: { "Content-Type": "application/json" },
-  });
+	return new Response(JSON.stringify({ status: "ok" }), {
+		status: 200,
+		headers: { "Content-Type": "application/json" },
+	});
 }
 
 /**
  * Main handler for POST /webhook/email
  */
 export async function handleEmailWebhook(
-  req: Request,
-  cfg: Config
+	req: Request,
+	cfg: Config,
 ): Promise<Response> {
-  // Get raw body for signature verification
-  const body = await req.text();
+	// Get raw body for signature verification
+	const body = await req.text();
 
-  // Verify signature from svix-signature header (skip in dev mode)
-  if (!cfg.devMode) {
-    const signature = req.headers.get("svix-signature") || "";
-    if (!verifySignature(body, signature, cfg.resend.webhookSecret)) {
-      return new Response(JSON.stringify({ error: "Invalid signature" }), {
-        status: 401,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-  }
+	// Verify signature from svix-signature header (skip in dev mode)
+	if (!cfg.devMode) {
+		const signature = req.headers.get("svix-signature") || "";
+		if (!verifySignature(body, signature, cfg.resend.webhookSecret)) {
+			return new Response(JSON.stringify({ error: "Invalid signature" }), {
+				status: 401,
+				headers: { "Content-Type": "application/json" },
+			});
+		}
+	}
 
-  // Parse payload
-  let payload: ResendInboundPayload;
-  try {
-    payload = JSON.parse(body);
-  } catch {
-    return new Response(JSON.stringify({ error: "Invalid JSON" }), {
-      status: 400,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
+	// Parse payload
+	let payload: ResendInboundPayload;
+	try {
+		payload = JSON.parse(body);
+	} catch {
+		return new Response(JSON.stringify({ error: "Invalid JSON" }), {
+			status: 400,
+			headers: { "Content-Type": "application/json" },
+		});
+	}
 
-  // Validate payload type
-  if (payload.type !== "email.received") {
-    return new Response(JSON.stringify({ error: "Unsupported event type" }), {
-      status: 400,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
+	// Validate payload type
+	if (payload.type !== "email.received") {
+		return new Response(JSON.stringify({ error: "Unsupported event type" }), {
+			status: 400,
+			headers: { "Content-Type": "application/json" },
+		});
+	}
 
-  // Log incoming email
-  console.log(`[Webhook] Received email from ${payload.data.from}`);
-  console.log(`[Webhook] Subject: ${payload.data.subject}`);
-  console.log(`[Webhook] Allowed senders: ${cfg.security.allowedSenders.join(", ") || "(none - all allowed)"}`);
+	// Log incoming email
+	console.log(`[Webhook] Received email from ${payload.data.from}`);
+	console.log(`[Webhook] Subject: ${payload.data.subject}`);
+	console.log(
+		`[Webhook] Allowed senders: ${cfg.security.allowedSenders.join(", ") || "(none - all allowed)"}`,
+	);
 
-  // Extract project from first "to" address (needed for from email)
-  const toAddress = payload.data.to[0];
-  if (!toAddress) {
-    return new Response(JSON.stringify({ error: "No recipient address" }), {
-      status: 400,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
+	// Extract project from first "to" address (needed for from email)
+	const toAddress = payload.data.to[0];
+	if (!toAddress) {
+		return new Response(JSON.stringify({ error: "No recipient address" }), {
+			status: 400,
+			headers: { "Content-Type": "application/json" },
+		});
+	}
 
-  const project = extractProject(toAddress);
-  console.log(`[Webhook] Project: ${project}`);
-  const fromEmail = `${project}@${cfg.resend.fromDomain}`;
+	const project = extractProject(toAddress);
+	console.log(`[Webhook] Project: ${project}`);
+	const fromEmail = `${project}@${cfg.resend.fromDomain}`;
 
-  // Check sender against allowlist
-  if (!isAllowedSender(payload.data.from, cfg.security.allowedSenders)) {
-    console.log(`[Webhook] Sender not in allowlist, sending error email`);
+	// Check sender against allowlist
+	if (!isAllowedSender(payload.data.from, cfg.security.allowedSenders)) {
+		console.log(`[Webhook] Sender not in allowlist, sending error email`);
 
-    // Send error email to the sender
-    try {
-      await sendNotAllowedEmail(
-        payload.data.from,
-        payload.data.subject,
-        payload.data.message_id || "",
-        fromEmail
-      );
-      console.log(`[Webhook] Sent not-allowed error email to ${payload.data.from}`);
-    } catch (emailError) {
-      console.error(`[Webhook] Failed to send not-allowed email:`, emailError);
-    }
+		// Send error email to the sender
+		try {
+			await sendNotAllowedEmail(
+				payload.data.from,
+				payload.data.subject,
+				payload.data.message_id || "",
+				fromEmail,
+			);
+			console.log(
+				`[Webhook] Sent not-allowed error email to ${payload.data.from}`,
+			);
+		} catch (emailError) {
+			console.error(`[Webhook] Failed to send not-allowed email:`, emailError);
+		}
 
-    return new Response(JSON.stringify({ error: "Sender not allowed" }), {
-      status: 403,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
+		return new Response(JSON.stringify({ error: "Sender not allowed" }), {
+			status: 403,
+			headers: { "Content-Type": "application/json" },
+		});
+	}
 
-  // Fetch full email content from Resend API (webhook only contains metadata)
-  const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) {
-    console.error("[Webhook] RESEND_API_KEY not set");
-    return new Response(JSON.stringify({ error: "Server configuration error" }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
+	// Fetch full email content from Resend API (webhook only contains metadata)
+	const apiKey = process.env.RESEND_API_KEY;
+	if (!apiKey) {
+		console.error("[Webhook] RESEND_API_KEY not set");
+		return new Response(
+			JSON.stringify({ error: "Server configuration error" }),
+			{
+				status: 500,
+				headers: { "Content-Type": "application/json" },
+			},
+		);
+	}
 
-  const emailResponse = await fetch(`https://api.resend.com/emails/receiving/${payload.data.email_id}`, {
-    headers: {
-      "Authorization": `Bearer ${apiKey}`,
-    },
-  });
+	const emailResponse = await fetch(
+		`https://api.resend.com/emails/receiving/${payload.data.email_id}`,
+		{
+			headers: {
+				Authorization: `Bearer ${apiKey}`,
+			},
+		},
+	);
 
-  if (!emailResponse.ok) {
-    console.error(`[Webhook] Failed to fetch email content: ${emailResponse.status} ${emailResponse.statusText}`);
-    return new Response(JSON.stringify({ error: "Failed to fetch email content" }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
+	if (!emailResponse.ok) {
+		console.error(
+			`[Webhook] Failed to fetch email content: ${emailResponse.status} ${emailResponse.statusText}`,
+		);
+		return new Response(
+			JSON.stringify({ error: "Failed to fetch email content" }),
+			{
+				status: 500,
+				headers: { "Content-Type": "application/json" },
+			},
+		);
+	}
 
-  const emailContent = await emailResponse.json() as { text?: string; html?: string };
+	const emailContent = (await emailResponse.json()) as {
+		text?: string;
+		html?: string;
+	};
 
-  // Ensure database is initialized
-  if (!db) {
-    db = initDb(cfg.paths.sessionsDb);
-  }
+	// Ensure database is initialized
+	if (!db) {
+		db = initDb(cfg.paths.sessionsDb);
+	}
 
-  // Get email body text (fallback to html if text is not available)
-  const emailText = emailContent.text || emailContent.html || "";
+	// Get email body text (fallback to html if text is not available)
+	const emailText = emailContent.text || emailContent.html || "";
 
-  // Create inbound email for session lookup
-  const inboundEmail: InboundEmail = {
-    from: payload.data.from,
-    to: toAddress,
-    subject: payload.data.subject,
-    text: emailText,
-    messageId: payload.data.message_id || "",
-  };
+	// Create inbound email for session lookup
+	const inboundEmail: InboundEmail = {
+		from: payload.data.from,
+		to: toAddress,
+		subject: payload.data.subject,
+		text: emailText,
+		messageId: payload.data.message_id || "",
+	};
 
-  // Get or create session
-  const session = getOrCreateSession(db, inboundEmail, project);
+	// Get or create session
+	const session = getOrCreateSession(db, inboundEmail, project);
 
-  // Check if this is a resume (existing session with claude_session_id)
-  const resumeSession = session.claudeSessionId !== null;
-  const isExisting = session.prNumber !== null || resumeSession;
-  console.log(`[Webhook] Session: ${session.id.slice(0, 8)} (${isExisting ? "existing" : "new"})`);
+	// Check if this is a resume (existing session with claude_session_id)
+	const resumeSession = session.claudeSessionId !== null;
+	const isExisting = session.prNumber !== null || resumeSession;
+	console.log(
+		`[Webhook] Session: ${session.id.slice(0, 8)} (${isExisting ? "existing" : "new"})`,
+	);
 
-  // Generate job ID
-  const jobId = generateJobId();
+	// Generate job ID
+	const jobId = generateJobId();
 
-  // Fetch attachment contents (if any)
-  const attachments = await fetchAttachments(payload.data.attachments);
-  if (attachments.length > 0) {
-    console.log(`[Webhook] Fetched ${attachments.length} attachment(s)`);
-  }
+	// Fetch attachment contents (if any)
+	const attachments = await fetchAttachments(payload.data.attachments);
+	if (attachments.length > 0) {
+		console.log(`[Webhook] Fetched ${attachments.length} attachment(s)`);
+	}
 
-  // Create email job
-  const job: EmailJob = {
-    id: jobId,
-    sessionId: session.id,
-    project,
-    prompt: emailText,
-    replyTo: payload.data.from,
-    originalSubject: payload.data.subject,
-    messageId: payload.data.message_id || "",
-    resumeSession,
-    attachments: attachments.length > 0 ? attachments : undefined,
-    createdAt: new Date().toISOString(),
-  };
+	// Create email job
+	const job: EmailJob = {
+		id: jobId,
+		sessionId: session.id,
+		project,
+		prompt: emailText,
+		replyTo: payload.data.from,
+		originalSubject: payload.data.subject,
+		messageId: payload.data.message_id || "",
+		resumeSession,
+		attachments: attachments.length > 0 ? attachments : undefined,
+		createdAt: new Date().toISOString(),
+	};
 
-  // Push job to Redis queue
-  if (!redisClient) {
-    redisClient = createClient({ url: cfg.redis.url });
-    await redisClient.connect();
-  }
+	// Push job to Redis queue
+	if (!redisClient) {
+		redisClient = createClient({ url: cfg.redis.url });
+		await redisClient.connect();
+	}
 
-  const queueKey = `${cfg.redis.prefix}jobs:pending`;
-  await redisClient.lPush(queueKey, JSON.stringify(job));
-  console.log(`[Webhook] Job queued: ${jobId.slice(0, 8)}`);
+	const queueKey = `${cfg.redis.prefix}jobs:pending`;
+	await redisClient.lPush(queueKey, JSON.stringify(job));
+	console.log(`[Webhook] Job queued: ${jobId.slice(0, 8)}`);
 
-  // Return success with job ID
-  return new Response(
-    JSON.stringify({
-      success: true,
-      jobId,
-      sessionId: session.id,
-      project,
-      resumeSession,
-    }),
-    {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    }
-  );
+	// Return success with job ID
+	return new Response(
+		JSON.stringify({
+			success: true,
+			jobId,
+			sessionId: session.id,
+			project,
+			resumeSession,
+		}),
+		{
+			status: 200,
+			headers: { "Content-Type": "application/json" },
+		},
+	);
 }
 
 /**
  * Create the HTTP server
  */
 export function createServer(
-  port: number,
-  cfg: Config = config
+	port: number,
+	cfg: Config = config,
 ): ReturnType<typeof Bun.serve> {
-  return Bun.serve({
-    port,
-    async fetch(req: Request): Promise<Response> {
-      const url = new URL(req.url);
+	return Bun.serve({
+		port,
+		async fetch(req: Request): Promise<Response> {
+			const url = new URL(req.url);
 
-      // Health check
-      if (req.method === "GET" && url.pathname === "/health") {
-        return handleHealth();
-      }
+			// Health check
+			if (req.method === "GET" && url.pathname === "/health") {
+				return handleHealth();
+			}
 
-      // Email webhook
-      if (req.method === "POST" && url.pathname === "/webhook/email") {
-        return handleEmailWebhook(req, cfg);
-      }
+			// Email webhook
+			if (req.method === "POST" && url.pathname === "/webhook/email") {
+				return handleEmailWebhook(req, cfg);
+			}
 
-      // Not found
-      return new Response(JSON.stringify({ error: "Not found" }), {
-        status: 404,
-        headers: { "Content-Type": "application/json" },
-      });
-    },
-  });
+			// Not found
+			return new Response(JSON.stringify({ error: "Not found" }), {
+				status: 404,
+				headers: { "Content-Type": "application/json" },
+			});
+		},
+	});
 }
 
 // Main entry point when run directly
 if (import.meta.main) {
-  const port = parseInt(process.env.WEBHOOK_PORT || "8080", 10);
+	const port = parseInt(process.env.WEBHOOK_PORT || "8080", 10);
 
-  console.log(`Starting webhook server on port ${port}...`);
-  if (config.devMode) {
-    console.log("⚠️  DEV_MODE enabled - signature verification disabled");
-  }
+	console.log(`Starting webhook server on port ${port}...`);
+	if (config.devMode) {
+		console.log("⚠️  DEV_MODE enabled - signature verification disabled");
+	}
 
-  // Initialize server
-  await initServer(config);
+	// Initialize server
+	await initServer(config);
 
-  const server = createServer(port, config);
+	const server = createServer(port, config);
 
-  console.log(`Webhook server listening on http://localhost:${server.port}`);
+	console.log(`Webhook server listening on http://localhost:${server.port}`);
 
-  // Handle graceful shutdown
-  process.on("SIGINT", async () => {
-    console.log("\nShutting down...");
-    await closeServer();
-    server.stop();
-    process.exit(0);
-  });
+	// Handle graceful shutdown
+	process.on("SIGINT", async () => {
+		console.log("\nShutting down...");
+		await closeServer();
+		server.stop();
+		process.exit(0);
+	});
 
-  process.on("SIGTERM", async () => {
-    console.log("\nShutting down...");
-    await closeServer();
-    server.stop();
-    process.exit(0);
-  });
+	process.on("SIGTERM", async () => {
+		console.log("\nShutting down...");
+		await closeServer();
+		server.stop();
+		process.exit(0);
+	});
 }

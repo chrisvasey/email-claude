@@ -5,58 +5,58 @@
  */
 
 export interface Config {
-  redis: {
-    url: string;
-    prefix: string;
-  };
-  resend: {
-    apiKey: string;
-    webhookSecret: string;
-    fromDomain: string;
-  };
-  github: {
-    owner: string;
-  };
-  security: {
-    allowedSenders: string[];
-  };
-  paths: {
-    projectsDir: string;
-    sessionsDb: string;
-  };
-  // Development mode - skips webhook signature verification
-  devMode: boolean;
+	redis: {
+		url: string;
+		prefix: string;
+	};
+	resend: {
+		apiKey: string;
+		webhookSecret: string;
+		fromDomain: string;
+	};
+	github: {
+		owner: string;
+	};
+	security: {
+		allowedSenders: string[];
+	};
+	paths: {
+		projectsDir: string;
+		sessionsDb: string;
+	};
+	// Development mode - skips webhook signature verification
+	devMode: boolean;
 }
 
 /**
  * Load configuration from environment variables with defaults
  */
 export function loadConfig(): Config {
-  return {
-    redis: {
-      url: process.env.REDIS_URL || "redis://localhost:6379",
-      prefix: process.env.REDIS_PREFIX || "email_claude_",
-    },
-    resend: {
-      apiKey: process.env.RESEND_API_KEY || "",
-      webhookSecret: process.env.RESEND_WEBHOOK_SECRET || "",
-      fromDomain: process.env.RESEND_FROM_DOMAIN || "cc.kindred.agency",
-    },
-    github: {
-      owner: process.env.GITHUB_OWNER || "",
-    },
-    security: {
-      allowedSenders: (process.env.ALLOWED_SENDERS || "")
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean),
-    },
-    paths: {
-      projectsDir: process.env.PROJECTS_DIR || "./projects",
-      sessionsDb: process.env.SESSIONS_DB || "./db/sessions.db",
-    },
-    devMode: process.env.DEV_MODE === "true",
-  };
+	return {
+		redis: {
+			url: process.env.REDIS_URL || "redis://localhost:6379",
+			prefix: process.env.REDIS_PREFIX || "email_claude_",
+		},
+		resend: {
+			apiKey: process.env.RESEND_API_KEY || "",
+			webhookSecret: process.env.RESEND_WEBHOOK_SECRET || "",
+			fromDomain: process.env.RESEND_FROM_DOMAIN || "cc.kindred.agency",
+		},
+		github: {
+			owner: process.env.GITHUB_OWNER || "",
+		},
+		security: {
+			allowedSenders: (process.env.ALLOWED_SENDERS || "")
+				.split(",")
+				.map((s) => s.trim())
+				.filter(Boolean),
+		},
+		paths: {
+			projectsDir: process.env.PROJECTS_DIR || "./projects",
+			sessionsDb: process.env.SESSIONS_DB || "./db/sessions.db",
+		},
+		devMode: process.env.DEV_MODE === "true",
+	};
 }
 
 /**
@@ -64,21 +64,21 @@ export function loadConfig(): Config {
  * @throws Error if any required variables are missing
  */
 export function validateConfig(cfg: Config): void {
-  const missing: string[] = [];
+	const missing: string[] = [];
 
-  if (!cfg.resend.apiKey) {
-    missing.push("RESEND_API_KEY");
-  }
+	if (!cfg.resend.apiKey) {
+		missing.push("RESEND_API_KEY");
+	}
 
-  if (!cfg.resend.webhookSecret) {
-    missing.push("RESEND_WEBHOOK_SECRET");
-  }
+	if (!cfg.resend.webhookSecret) {
+		missing.push("RESEND_WEBHOOK_SECRET");
+	}
 
-  if (missing.length > 0) {
-    throw new Error(
-      `Missing required environment variables: ${missing.join(", ")}`
-    );
-  }
+	if (missing.length > 0) {
+		throw new Error(
+			`Missing required environment variables: ${missing.join(", ")}`,
+		);
+	}
 }
 
 /**
@@ -86,9 +86,9 @@ export function validateConfig(cfg: Config): void {
  * @throws Error if required variables are missing
  */
 export function getConfig(): Config {
-  const cfg = loadConfig();
-  validateConfig(cfg);
-  return cfg;
+	const cfg = loadConfig();
+	validateConfig(cfg);
+	return cfg;
 }
 
 // Export a lazily-validated config for convenience

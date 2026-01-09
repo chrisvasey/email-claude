@@ -4,8 +4,8 @@
  * Loads markdown prompt templates from the prompts/ folder.
  */
 
-import { readFileSync } from "fs";
-import { join } from "path";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 const PROMPTS_DIR = join(import.meta.dir, "../prompts");
 
@@ -13,8 +13,8 @@ const PROMPTS_DIR = join(import.meta.dir, "../prompts");
  * Load a prompt template by name (without .md extension)
  */
 export function loadPrompt(name: string): string {
-  const path = join(PROMPTS_DIR, `${name}.md`);
-  return readFileSync(path, "utf-8");
+	const path = join(PROMPTS_DIR, `${name}.md`);
+	return readFileSync(path, "utf-8");
 }
 
 /**
@@ -23,11 +23,9 @@ export function loadPrompt(name: string): string {
  * @param body - Email body content (may be empty if subject contains full instructions)
  */
 export function buildFullPrompt(subject: string, body: string): string {
-  const system = loadPrompt("system");
-  const userContent = body.trim()
-    ? `Subject: ${subject}\n\n${body}`
-    : subject; // If no body, just use subject directly
-  return `${system}\n\n---\n\n${userContent}`;
+	const system = loadPrompt("system");
+	const userContent = body.trim() ? `Subject: ${subject}\n\n${body}` : subject; // If no body, just use subject directly
+	return `${system}\n\n---\n\n${userContent}`;
 }
 
 /**
@@ -36,11 +34,9 @@ export function buildFullPrompt(subject: string, body: string): string {
  * @param body - Email body content
  */
 export function buildPlanPrompt(subject: string, body: string): string {
-  const planInstructions = loadPrompt("plan-mode");
-  const userContent = body.trim()
-    ? `Subject: ${subject}\n\n${body}`
-    : subject;
-  return `${planInstructions}\n\n---\n\n${userContent}`;
+	const planInstructions = loadPrompt("plan-mode");
+	const userContent = body.trim() ? `Subject: ${subject}\n\n${body}` : subject;
+	return `${planInstructions}\n\n---\n\n${userContent}`;
 }
 
 /**
@@ -50,16 +46,14 @@ export function buildPlanPrompt(subject: string, body: string): string {
  * @param approvedPlan - The plan that was approved
  */
 export function buildExecutionPrompt(
-  subject: string,
-  body: string,
-  approvedPlan: string
+	subject: string,
+	body: string,
+	approvedPlan: string,
 ): string {
-  const system = loadPrompt("system");
-  const userContent = body.trim()
-    ? `Subject: ${subject}\n\n${body}`
-    : subject;
+	const system = loadPrompt("system");
+	const userContent = body.trim() ? `Subject: ${subject}\n\n${body}` : subject;
 
-  return `${system}
+	return `${system}
 
 ---
 
@@ -83,16 +77,14 @@ ${userContent}`;
  * @param currentPlan - The current plan to be revised
  */
 export function buildRevisionPrompt(
-  subject: string,
-  body: string,
-  currentPlan: string
+	subject: string,
+	body: string,
+	currentPlan: string,
 ): string {
-  const planInstructions = loadPrompt("plan-mode");
-  const userContent = body.trim()
-    ? `Subject: ${subject}\n\n${body}`
-    : subject;
+	const planInstructions = loadPrompt("plan-mode");
+	const userContent = body.trim() ? `Subject: ${subject}\n\n${body}` : subject;
 
-  return `${planInstructions}
+	return `${planInstructions}
 
 ---
 

@@ -9,8 +9,8 @@
  * Options for dependency injection (primarily for testing)
  */
 export interface RepoOptions {
-  fileExists?: (path: string) => Promise<boolean>;
-  spawn?: typeof Bun.spawn;
+	fileExists?: (path: string) => Promise<boolean>;
+	spawn?: typeof Bun.spawn;
 }
 
 // Default implementations using Bun APIs
@@ -22,18 +22,18 @@ const defaultSpawn = Bun.spawn;
  * email-claude -> git@github.com:chrisvasey/email-claude.git
  */
 export function getRepoUrl(project: string, owner: string): string {
-  return `git@github.com:${owner}/${project}.git`;
+	return `git@github.com:${owner}/${project}.git`;
 }
 
 /**
  * Check if a repository exists at the given path
  */
 export async function repoExists(
-  projectPath: string,
-  opts: RepoOptions = {}
+	projectPath: string,
+	opts: RepoOptions = {},
 ): Promise<boolean> {
-  const fileExists = opts.fileExists ?? defaultFileExists;
-  return fileExists(`${projectPath}/.git/config`);
+	const fileExists = opts.fileExists ?? defaultFileExists;
+	return fileExists(`${projectPath}/.git/config`);
 }
 
 /**
@@ -46,45 +46,43 @@ export async function repoExists(
  * @returns The full path to the project
  */
 export async function ensureRepo(
-  project: string,
-  projectsDir: string,
-  owner: string,
-  opts: RepoOptions = {}
+	project: string,
+	projectsDir: string,
+	owner: string,
+	opts: RepoOptions = {},
 ): Promise<string> {
-  const projectPath = `${projectsDir}/${project}`;
-  const spawn = opts.spawn ?? defaultSpawn;
+	const projectPath = `${projectsDir}/${project}`;
+	const spawn = opts.spawn ?? defaultSpawn;
 
-  // Check if repo already exists
-  if (await repoExists(projectPath, opts)) {
-    console.log(`[Repo] ${project} exists at ${projectPath}`);
-    return projectPath;
-  }
+	// Check if repo already exists
+	if (await repoExists(projectPath, opts)) {
+		console.log(`[Repo] ${project} exists at ${projectPath}`);
+		return projectPath;
+	}
 
-  // Validate owner is configured
-  if (!owner) {
-    throw new Error(
-      `Cannot clone ${project}: GITHUB_OWNER is not configured`
-    );
-  }
+	// Validate owner is configured
+	if (!owner) {
+		throw new Error(`Cannot clone ${project}: GITHUB_OWNER is not configured`);
+	}
 
-  // Clone the repo
-  const repoUrl = getRepoUrl(project, owner);
-  console.log(`[Repo] Cloning ${repoUrl} to ${projectPath}...`);
+	// Clone the repo
+	const repoUrl = getRepoUrl(project, owner);
+	console.log(`[Repo] Cloning ${repoUrl} to ${projectPath}...`);
 
-  const proc = spawn(["git", "clone", repoUrl, projectPath], {
-    stdout: "pipe",
-    stderr: "pipe",
-  });
+	const proc = spawn(["git", "clone", repoUrl, projectPath], {
+		stdout: "pipe",
+		stderr: "pipe",
+	});
 
-  const exitCode = await proc.exited;
+	const exitCode = await proc.exited;
 
-  if (exitCode !== 0) {
-    const stderr = await new Response(proc.stderr).text();
-    throw new Error(
-      `Failed to clone ${repoUrl}: ${stderr.trim() || `exit code ${exitCode}`}`
-    );
-  }
+	if (exitCode !== 0) {
+		const stderr = await new Response(proc.stderr).text();
+		throw new Error(
+			`Failed to clone ${repoUrl}: ${stderr.trim() || `exit code ${exitCode}`}`,
+		);
+	}
 
-  console.log(`[Repo] Successfully cloned ${project}`);
-  return projectPath;
+	console.log(`[Repo] Successfully cloned ${project}`);
+	return projectPath;
 }

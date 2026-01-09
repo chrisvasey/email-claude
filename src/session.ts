@@ -7,37 +7,37 @@
  */
 
 import { Database } from "bun:sqlite";
-import { createHash } from "crypto";
+import { createHash } from "node:crypto";
 
-export type SessionMode = 'normal' | 'plan_pending';
+export type SessionMode = "normal" | "plan_pending";
 
 export interface Session {
-  id: string;
-  subjectHash: string;
-  project: string;
-  branchName: string;
-  claudeSessionId: string | null;
-  prNumber: number | null;
-  createdAt: string;
-  lastActivity: string;
-  mode: SessionMode;
-  pendingPlan: string | null;
+	id: string;
+	subjectHash: string;
+	project: string;
+	branchName: string;
+	claudeSessionId: string | null;
+	prNumber: number | null;
+	createdAt: string;
+	lastActivity: string;
+	mode: SessionMode;
+	pendingPlan: string | null;
 }
 
 export interface SessionMessage {
-  id: number;
-  sessionId: string;
-  role: "user" | "assistant";
-  content: string;
-  createdAt: string;
+	id: number;
+	sessionId: string;
+	role: "user" | "assistant";
+	content: string;
+	createdAt: string;
 }
 
 export interface InboundEmail {
-  from: string;
-  to: string;
-  subject: string;
-  text: string;
-  messageId?: string;
+	from: string;
+	to: string;
+	subject: string;
+	text: string;
+	messageId?: string;
 }
 
 /**
@@ -47,10 +47,10 @@ export interface InboundEmail {
  * - Converting to lowercase
  */
 function normalizeSubject(subject: string): string {
-  return subject
-    .replace(/^(?:re:|fwd?:|fw:)\s*/gi, "")
-    .trim()
-    .toLowerCase();
+	return subject
+		.replace(/^(?:re:|fwd?:|fw:)\s*/gi, "")
+		.trim()
+		.toLowerCase();
 }
 
 /**
@@ -58,9 +58,9 @@ function normalizeSubject(subject: string): string {
  * Returns the first 12 characters of the SHA256 hash.
  */
 export function hashSubject(subject: string): string {
-  const normalized = normalizeSubject(subject);
-  const hash = createHash("sha256").update(normalized).digest("hex");
-  return hash.slice(0, 12);
+	const normalized = normalizeSubject(subject);
+	const hash = createHash("sha256").update(normalized).digest("hex");
+	return hash.slice(0, 12);
 }
 
 /**
@@ -68,9 +68,9 @@ export function hashSubject(subject: string): string {
  * Creates the table and index if they don't exist.
  */
 export function initDb(dbPath: string): Database {
-  const db = new Database(dbPath);
+	const db = new Database(dbPath);
 
-  db.run(`
+	db.run(`
     CREATE TABLE IF NOT EXISTS sessions (
       id TEXT PRIMARY KEY,
       subject_hash TEXT UNIQUE NOT NULL,
@@ -85,11 +85,11 @@ export function initDb(dbPath: string): Database {
     )
   `);
 
-  db.run(`
+	db.run(`
     CREATE INDEX IF NOT EXISTS idx_subject_hash ON sessions(subject_hash)
   `);
 
-  db.run(`
+	db.run(`
     CREATE TABLE IF NOT EXISTS session_messages (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       session_id TEXT NOT NULL,
@@ -100,11 +100,11 @@ export function initDb(dbPath: string): Database {
     )
   `);
 
-  db.run(`
+	db.run(`
     CREATE INDEX IF NOT EXISTS idx_session_messages_session_id ON session_messages(session_id)
   `);
 
-  return db;
+	return db;
 }
 
 /**
@@ -112,7 +112,7 @@ export function initDb(dbPath: string): Database {
  * Returns null if no session exists with that hash.
  */
 export function getSession(db: Database, subjectHash: string): Session | null {
-  const stmt = db.prepare(`
+	const stmt = db.prepare(`
     SELECT
       id,
       subject_hash as subjectHash,
@@ -128,8 +128,8 @@ export function getSession(db: Database, subjectHash: string): Session | null {
     WHERE subject_hash = ?
   `);
 
-  const row = stmt.get(subjectHash) as Session | null;
-  return row;
+	const row = stmt.get(subjectHash) as Session | null;
+	return row;
 }
 
 /**
@@ -137,12 +137,12 @@ export function getSession(db: Database, subjectHash: string): Session | null {
  * Timestamps are automatically set to the current time.
  */
 export function createSession(
-  db: Database,
-  session: Omit<Session, "createdAt" | "lastActivity">
+	db: Database,
+	session: Omit<Session, "createdAt" | "lastActivity">,
 ): void {
-  const now = new Date().toISOString();
+	const now = new Date().toISOString();
 
-  const stmt = db.prepare(`
+	const stmt = db.prepare(`
     INSERT INTO sessions (
       id, subject_hash, project, branch_name,
       claude_session_id, pr_number, created_at, last_activity,
@@ -150,18 +150,18 @@ export function createSession(
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
-  stmt.run(
-    session.id,
-    session.subjectHash,
-    session.project,
-    session.branchName,
-    session.claudeSessionId,
-    session.prNumber,
-    now,
-    now,
-    session.mode,
-    session.pendingPlan
-  );
+	stmt.run(
+		session.id,
+		session.subjectHash,
+		session.project,
+		session.branchName,
+		session.claudeSessionId,
+		session.prNumber,
+		now,
+		now,
+		session.mode,
+		session.pendingPlan,
+	);
 }
 
 /**
@@ -169,51 +169,51 @@ export function createSession(
  * Automatically updates the last_activity timestamp.
  */
 export function updateSession(
-  db: Database,
-  id: string,
-  updates: Partial<Session>
+	db: Database,
+	id: string,
+	updates: Partial<Session>,
 ): void {
-  const now = new Date().toISOString();
-  const fields: string[] = ["last_activity = ?"];
-  const values: (string | number | null)[] = [now];
+	const now = new Date().toISOString();
+	const fields: string[] = ["last_activity = ?"];
+	const values: (string | number | null)[] = [now];
 
-  if (updates.claudeSessionId !== undefined) {
-    fields.push("claude_session_id = ?");
-    values.push(updates.claudeSessionId);
-  }
+	if (updates.claudeSessionId !== undefined) {
+		fields.push("claude_session_id = ?");
+		values.push(updates.claudeSessionId);
+	}
 
-  if (updates.prNumber !== undefined) {
-    fields.push("pr_number = ?");
-    values.push(updates.prNumber);
-  }
+	if (updates.prNumber !== undefined) {
+		fields.push("pr_number = ?");
+		values.push(updates.prNumber);
+	}
 
-  if (updates.branchName !== undefined) {
-    fields.push("branch_name = ?");
-    values.push(updates.branchName);
-  }
+	if (updates.branchName !== undefined) {
+		fields.push("branch_name = ?");
+		values.push(updates.branchName);
+	}
 
-  if (updates.project !== undefined) {
-    fields.push("project = ?");
-    values.push(updates.project);
-  }
+	if (updates.project !== undefined) {
+		fields.push("project = ?");
+		values.push(updates.project);
+	}
 
-  if (updates.mode !== undefined) {
-    fields.push("mode = ?");
-    values.push(updates.mode);
-  }
+	if (updates.mode !== undefined) {
+		fields.push("mode = ?");
+		values.push(updates.mode);
+	}
 
-  if (updates.pendingPlan !== undefined) {
-    fields.push("pending_plan = ?");
-    values.push(updates.pendingPlan);
-  }
+	if (updates.pendingPlan !== undefined) {
+		fields.push("pending_plan = ?");
+		values.push(updates.pendingPlan);
+	}
 
-  values.push(id);
+	values.push(id);
 
-  const stmt = db.prepare(`
+	const stmt = db.prepare(`
     UPDATE sessions SET ${fields.join(", ")} WHERE id = ?
   `);
 
-  stmt.run(...values);
+	stmt.run(...values);
 }
 
 /**
@@ -221,11 +221,11 @@ export function updateSession(
  * Uses crypto random bytes for uniqueness.
  */
 function generateSessionId(): string {
-  const bytes = new Uint8Array(16);
-  crypto.getRandomValues(bytes);
-  return Array.from(bytes)
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
+	const bytes = new Uint8Array(16);
+	crypto.getRandomValues(bytes);
+	return Array.from(bytes)
+		.map((b) => b.toString(16).padStart(2, "0"))
+		.join("");
 }
 
 /**
@@ -233,7 +233,7 @@ function generateSessionId(): string {
  * Format: email-claude-{first 8 chars of session id}
  */
 function generateBranchName(sessionId: string): string {
-  return `email-claude-${sessionId.slice(0, 8)}`;
+	return `email-claude-${sessionId.slice(0, 8)}`;
 }
 
 /**
@@ -241,77 +241,77 @@ function generateBranchName(sessionId: string): string {
  * Updates last_activity if the session exists.
  */
 export function getOrCreateSession(
-  db: Database,
-  email: InboundEmail,
-  project: string
+	db: Database,
+	email: InboundEmail,
+	project: string,
 ): Session {
-  const subjectHash = hashSubject(email.subject);
+	const subjectHash = hashSubject(email.subject);
 
-  // Check for existing session
-  const existing = getSession(db, subjectHash);
+	// Check for existing session
+	const existing = getSession(db, subjectHash);
 
-  if (existing) {
-    // Update last activity timestamp
-    updateSession(db, existing.id, {});
+	if (existing) {
+		// Update last activity timestamp
+		updateSession(db, existing.id, {});
 
-    // Return with updated timestamp
-    return {
-      ...existing,
-      lastActivity: new Date().toISOString(),
-    };
-  }
+		// Return with updated timestamp
+		return {
+			...existing,
+			lastActivity: new Date().toISOString(),
+		};
+	}
 
-  // Create new session
-  const sessionId = generateSessionId();
-  const branchName = generateBranchName(sessionId);
+	// Create new session
+	const sessionId = generateSessionId();
+	const branchName = generateBranchName(sessionId);
 
-  const newSession: Omit<Session, "createdAt" | "lastActivity"> = {
-    id: sessionId,
-    subjectHash,
-    project,
-    branchName,
-    claudeSessionId: null,
-    prNumber: null,
-    mode: 'normal',
-    pendingPlan: null,
-  };
+	const newSession: Omit<Session, "createdAt" | "lastActivity"> = {
+		id: sessionId,
+		subjectHash,
+		project,
+		branchName,
+		claudeSessionId: null,
+		prNumber: null,
+		mode: "normal",
+		pendingPlan: null,
+	};
 
-  createSession(db, newSession);
+	createSession(db, newSession);
 
-  // Return the full session with timestamps
-  const now = new Date().toISOString();
-  return {
-    ...newSession,
-    createdAt: now,
-    lastActivity: now,
-  };
+	// Return the full session with timestamps
+	const now = new Date().toISOString();
+	return {
+		...newSession,
+		createdAt: now,
+		lastActivity: now,
+	};
 }
 
 /**
  * Add a message to a session's conversation history
  */
 export function addSessionMessage(
-  db: Database,
-  sessionId: string,
-  role: "user" | "assistant",
-  content: string
+	db: Database,
+	sessionId: string,
+	role: "user" | "assistant",
+	content: string,
 ): void {
-  const now = new Date().toISOString();
-  const stmt = db.prepare(`
+	const now = new Date().toISOString();
+	const stmt = db.prepare(`
     INSERT INTO session_messages (session_id, role, content, created_at)
     VALUES (?, ?, ?, ?)
   `);
-  stmt.run(sessionId, role, content, now);
+	stmt.run(sessionId, role, content, now);
 }
 
 /**
  * Get all messages for a session, ordered by creation time
  */
 export function getSessionMessages(
-  db: Database,
-  sessionId: string
+	db: Database,
+	sessionId: string,
 ): SessionMessage[] {
-  const stmt = db.prepare(`
+	const stmt = db.prepare(`
     SELECT
       id,
       session_id as sessionId,
@@ -322,5 +322,5 @@ export function getSessionMessages(
     WHERE session_id = ?
     ORDER BY created_at ASC
   `);
-  return stmt.all(sessionId) as SessionMessage[];
+	return stmt.all(sessionId) as SessionMessage[];
 }
