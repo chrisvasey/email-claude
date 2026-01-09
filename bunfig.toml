@@ -1,4 +1,0 @@
-[test]
-# Run tests in separate workers for better isolation
-# This prevents mock.module pollution between test files
-smol = false
