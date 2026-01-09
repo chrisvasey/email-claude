@@ -135,6 +135,7 @@ bun test src/config.test.ts
 - [x] Error email response when sender not on whitelist
 - [x] Email subject passed to Claude as context
 - [x] GitHub Actions CI
+- [x] Branch safety - always branch from main/master for new threads
 - [ ] `claude --resume` integration (partial: flag passed, session ID not persisted)
 - [ ] Preview deployment URL extraction
 - [ ] Attachment handling (images to Claude vision)

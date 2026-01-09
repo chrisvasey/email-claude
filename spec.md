@@ -378,6 +378,7 @@ email-claude/
 - [x] HTML email formatting with React Email
 - [x] Error email response when sender not on whitelist
 - [x] Email subject passed to Claude as context
+- [x] Branch safety - always branch from main/master for new threads
 - [ ] `claude --resume` integration (partial: flag passed, session ID not persisted)
 - [ ] Preview deployment URL extraction
 - [ ] Attachment handling (images → Claude vision)
@@ -609,6 +610,7 @@ The Redis BLPOP pattern is identical. Key differences:
 - [x] HTML email formatting with React Email
 - [x] Error email response when sender not on whitelist
 - [x] Email subject passed to Claude as context
+- [x] Branch safety (`src/branch-safety.ts`) - always branch from main/master
 - [ ] Pass `--resume` flag for multi-turn conversations (partial: flag passed, session ID not persisted)
 - [ ] Store Claude session ID after first run
 - [ ] Parse Claude output for preview URLs

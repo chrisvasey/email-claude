@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- Branch safety: New email threads always branch from main/master
+- Notification email sent when repo was on a different branch
+- New git helpers: `getDefaultBranch()`, `getCurrentBranch()`, `checkoutBranch()`
+- New module: `src/branch-safety.ts` for branch safety logic
+- New email template: `src/emails/branch-notice-email.tsx`
+
 ### Remaining
 - `claude --resume` integration (session ID persistence)
 - Preview deployment URL extraction

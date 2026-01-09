@@ -374,6 +374,7 @@ const prUrl = await getPRUrl(projectPath, session.prNumber);
 - [x] Error email response when sender not on whitelist
 - [x] Email subject passed to Claude as context
 - [x] GitHub Actions for tests
+- [x] Branch safety (`src/branch-safety.ts`) - always branch from main/master, notify if switched
 
 ### Remaining Items
 - [ ] `claude --resume` integration (partial: flag passed, session ID not persisted)
