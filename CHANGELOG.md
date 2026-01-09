@@ -11,12 +11,30 @@ All notable changes to this project will be documented in this file.
 - New module: `src/branch-safety.ts` for branch safety logic
 - New email template: `src/emails/branch-notice-email.tsx`
 
-### Remaining
-- `claude --resume` integration (session ID persistence)
-- Preview deployment URL extraction
-- Attachment handling (images to Claude vision)
-- Error handling & retry logic
-- Special commands ([merge], [close], [status])
+## [0.3.0] - 2026-01-09
+
+### Added - Phase 3 Complete
+- **`--resume` integration**: Claude session ID extracted from output and persisted for multi-turn conversations
+- **Preview URL extraction**: Automatically detects deployment URLs (vercel.app, netlify.app, pages.dev, fly.dev, railway.app, render.com, herokuapp.com) in Claude's responses
+- **Attachment handling**:
+  - Fetches attachment content from Resend download URLs
+  - Saves files to `.attachments/{sessionId}/` in project directory
+  - Passes file paths to Claude in the prompt
+- **Retry logic with exponential backoff**:
+  - Max 3 retries per job
+  - Exponential backoff: 1s, 2s, 4s delays
+  - Dead letter queue for permanently failed jobs
+  - Retry queue using Redis sorted sets
+- **Special commands** via `src/commands.ts`:
+  - `[merge]` - Merge the PR
+  - `[close]` - Close the PR without merging
+  - `[status]` - Get session/PR status
+
+### Changed
+- Updated `EmailJob` interface with `retryCount` and proper `EmailAttachment` type
+- Updated `ClaudeResult` interface with `previewUrls` and `claudeSessionId`
+- Worker now handles retries instead of dropping failed jobs
+- Test count increased from 112 to 150
 
 ## [0.2.0] - 2026-01-08
 

@@ -2,7 +2,7 @@
 
 A step-by-step guide to building email-driven Claude Code with **Bun**.
 
-**Status:** Phase 1 & 2 COMPLETE (112 tests passing)
+**Status:** Phase 1, 2 & 3 COMPLETE (150 tests passing)
 
 ---
 
@@ -365,9 +365,9 @@ const prUrl = await getPRUrl(projectPath, session.prNumber);
 
 ---
 
-## Phase 4: Polish - IN PROGRESS
+## Phase 4: Polish - COMPLETE
 
-### Completed
+### All Items Complete
 - [x] Auto-clone repos (GITHUB_OWNER config, `src/services/repo.ts`)
 - [x] Docker deployment (`Dockerfile`, `docker-compose.yml`)
 - [x] HTML email formatting with React Email
@@ -375,13 +375,11 @@ const prUrl = await getPRUrl(projectPath, session.prNumber);
 - [x] Email subject passed to Claude as context
 - [x] GitHub Actions for tests
 - [x] Branch safety (`src/branch-safety.ts`) - always branch from main/master, notify if switched
-
-### Remaining Items
-- [ ] `claude --resume` integration (partial: flag passed, session ID not persisted)
-- [ ] Preview deployment URL extraction
-- [ ] Attachment handling (images to Claude vision)
-- [ ] Error handling & retry logic
-- [ ] Special commands ([merge], [close], [status])
+- [x] `claude --resume` integration (session ID extracted and persisted)
+- [x] Preview deployment URL extraction (vercel.app, netlify.app, pages.dev, etc.)
+- [x] Attachment handling (fetched from Resend, saved to disk, paths passed to Claude)
+- [x] Error handling & retry logic (exponential backoff, max 3 retries, dead letter queue)
+- [x] Special commands ([merge], [close], [status]) via `src/commands.ts`
 
 ### Step 4.1: Error Handling & Retries
 **File:** `src/handlers/email-job.ts`

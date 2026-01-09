@@ -372,18 +372,18 @@ email-claude/
 - [x] Follow-up emails add PR comments
 - [x] Atomic commits via system instructions
 
-### Phase 3: Polish
+### Phase 3: Polish - COMPLETE
 - [x] Auto-clone repos (`GITHUB_OWNER` config, `src/services/repo.ts`)
 - [x] Docker deployment (`Dockerfile`, `docker-compose.yml`)
 - [x] HTML email formatting with React Email
 - [x] Error email response when sender not on whitelist
 - [x] Email subject passed to Claude as context
 - [x] Branch safety - always branch from main/master for new threads
-- [ ] `claude --resume` integration (partial: flag passed, session ID not persisted)
-- [ ] Preview deployment URL extraction
-- [ ] Attachment handling (images → Claude vision)
-- [ ] Error handling & retry logic
-- [ ] Special commands ([merge], [close], [status])
+- [x] `claude --resume` integration (session ID extracted and persisted)
+- [x] Preview deployment URL extraction (vercel.app, netlify.app, etc.)
+- [x] Attachment handling (fetched from Resend, saved to disk)
+- [x] Error handling & retry logic (exponential backoff, max 3 retries)
+- [x] Special commands ([merge], [close], [status])
 
 ### Phase 4: Nice-to-haves
 - [ ] Web dashboard for monitoring
@@ -604,15 +604,16 @@ The Redis BLPOP pattern is identical. Key differences:
 - [x] Follow-up emails add comments to existing PR
 - [x] Atomic commits via `prompts/system.md` instructions
 
-**Phase 3 - Polish:**
+**Phase 3 - Polish: COMPLETE**
 - [x] Auto-clone repos (`GITHUB_OWNER` config, `src/services/repo.ts`)
 - [x] Docker deployment (`Dockerfile`, `docker-compose.yml`)
 - [x] HTML email formatting with React Email
 - [x] Error email response when sender not on whitelist
 - [x] Email subject passed to Claude as context
 - [x] Branch safety (`src/branch-safety.ts`) - always branch from main/master
-- [ ] Pass `--resume` flag for multi-turn conversations (partial: flag passed, session ID not persisted)
-- [ ] Store Claude session ID after first run
-- [ ] Parse Claude output for preview URLs
-- [ ] Handle attachments (save to disk, pass to Claude)
-- [ ] Special commands ([merge], [close], [status])
+- [x] Pass `--resume` flag for multi-turn conversations
+- [x] Store Claude session ID after first run
+- [x] Parse Claude output for preview URLs
+- [x] Handle attachments (save to disk, pass to Claude)
+- [x] Special commands ([merge], [close], [status])
+- [x] Retry logic with exponential backoff (max 3 retries)

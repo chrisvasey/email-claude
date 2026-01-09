@@ -118,7 +118,7 @@ bun test src/config.test.ts
 - [x] Plain text email replies (`src/mailer.ts`)
 - [x] Auto PR creation via `gh` CLI (`src/git.ts`)
 - [x] Email job processing (`src/handlers/email-job.ts`)
-- [x] Full test coverage (112 tests)
+- [x] Full test coverage (150 tests)
 
 ### Phase 2: Sessions & Threading - Complete
 - [x] Subject-based session tracking (via subject hash)
@@ -128,7 +128,7 @@ bun test src/config.test.ts
 - [x] Follow-up emails add comments to existing PR
 - [x] Atomic commits via system instructions (`prompts/system.md`)
 
-### Phase 3: Polish - In Progress
+### Phase 3: Polish - Complete
 - [x] Auto-clone repos (`GITHUB_OWNER` config)
 - [x] Docker deployment (`Dockerfile`, `docker-compose.yml`)
 - [x] HTML email formatting with React Email
@@ -136,11 +136,11 @@ bun test src/config.test.ts
 - [x] Email subject passed to Claude as context
 - [x] GitHub Actions CI
 - [x] Branch safety - always branch from main/master for new threads
-- [ ] `claude --resume` integration (partial: flag passed, session ID not persisted)
-- [ ] Preview deployment URL extraction
-- [ ] Attachment handling (images to Claude vision)
-- [ ] Error handling & retry logic
-- [ ] Special commands ([merge], [close], [status])
+- [x] `claude --resume` integration (session ID extracted and persisted)
+- [x] Preview deployment URL extraction (vercel.app, netlify.app, etc.)
+- [x] Attachment handling (saved to disk, paths passed to Claude)
+- [x] Error handling & retry logic (exponential backoff, max 3 retries)
+- [x] Special commands ([merge], [close], [status])
 
 ## Docker Deployment
 
